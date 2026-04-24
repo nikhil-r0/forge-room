@@ -1,0 +1,11 @@
+.env
+.codex
+*.pyc
+__pycache__/
+.pytest_cache/
+*.db
+*.sqlite3
+*.Zone.Identifier
+backend/data/
+backend/backend/
+backend/forgeroom.db
