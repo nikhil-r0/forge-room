@@ -176,23 +176,13 @@ class VoteRequest(BaseModel):
 class ExecuteSpecRequest(BaseModel):
     spec_markdown: str
     approved_decisions: list[DecisionPayload]
-
-
-class ExecuteSpecResponse(BaseModel):
-    diff: str
-    status: str
-
-
-class ApplyDiffRequest(BaseModel):
-    diff_text: str
-    commit_message: str
+    commit_message: str | None = None
     push: bool = False
 
 
-class ApplyDiffResponse(BaseModel):
+class ExecuteSpecResponse(BaseModel):
+    summary: str
     status: str
-    commit_hash: str | None = None
-    detail: str | None = None
 
 
 class AgentRequest(BaseModel):
