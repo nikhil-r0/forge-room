@@ -3,7 +3,7 @@
 import { toast } from "sonner";
 import { useRoomStore } from "./useRoomStore";
 import { MessageType } from "./types";
-import type { UIMessage, ConflictPayload, DriftAlertPayload } from "./types";
+import type { UIMessage, ConflictPayload, DriftAlertPayload, DecisionPayload } from "./types";
 
 const getWsUrl = (port: number) => {
   if (typeof window !== "undefined") {
@@ -118,9 +118,10 @@ function routeMessage(data: Record<string, unknown>) {
     }
 
     case MessageType.SPEC_UPDATE: {
+      console.log("[WS] SPEC_UPDATE received:", payload);
       store.setSpecState(payload as {
         current_goal: string;
-        approved_decisions: [];
+        approved_decisions: DecisionPayload[];
         pending_tasks: string[];
         open_conflicts: number;
       });

@@ -176,7 +176,7 @@ export function SpecPanel({
               className={`w-5 h-5 ${isLocked ? "opacity-40" : "transition-transform group-hover:scale-110"}`}
             />
           )}
-          {isGenerating ? "Generating…" : "Generate Code"}
+          {isGenerating ? "Starting…" : "Execute Spec"}
         </button>
         {isLocked && (
           <p className="text-[10px] text-center mt-4 text-error font-medium uppercase tracking-widest flex items-center justify-center gap-2">

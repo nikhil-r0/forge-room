@@ -92,6 +92,7 @@ export interface RoomSnapshot {
   blame_graph_nodes: BlameNode[];
   blame_graph_edges: BlameEdge[];
   last_drift_alerts: DriftAlertPayload[];
+  messages: { sender: string; message: string; timestamp: string }[];
   session_start: string;
 }
 

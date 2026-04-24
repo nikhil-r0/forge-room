@@ -3,7 +3,6 @@ from pathlib import Path
 from git import Repo
 
 from .database import Base
-from .demo_repo import seed_demo_repo
 
 
 def ensure_database(engine) -> None:
@@ -11,7 +10,7 @@ def ensure_database(engine) -> None:
 
 
 def ensure_demo_repo(repo_root: Path) -> None:
-    seed_demo_repo(repo_root)
+    repo_root.mkdir(parents=True, exist_ok=True)
     if not (repo_root / ".git").exists():
         repo = Repo.init(repo_root)
         repo.git.add(A=True)

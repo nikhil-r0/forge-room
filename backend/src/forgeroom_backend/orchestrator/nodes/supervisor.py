@@ -46,6 +46,8 @@ async def supervisor_node(db: Session, room_id: str, provider: AIProvider) -> di
         )
 
     tasks = repository.add_pending_tasks(db, room_id, result.get("new_tasks", []))
+    if result.get("completed_tasks"):
+        tasks = repository.remove_pending_tasks(db, room_id, result["completed_tasks"])
 
     conflict_payload = None
     if result.get("conflict_detected") and result.get("conflict"):

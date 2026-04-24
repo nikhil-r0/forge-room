@@ -45,7 +45,7 @@ def startup() -> None:
 async def on_batch_ready(room_id: str, messages: list[dict]) -> None:
     try:
         logger.info(f"📤 Sending batch to Orchestrator for Room: {room_id}")
-        async with httpx.AsyncClient(timeout=settings.service_timeout_seconds) as client:
+        async with httpx.AsyncClient(timeout=None) as client:
             response = await client.post(
                 f"{settings.orchestrator_url}/api/process-batch",
                 json=ChatBatchRequest(room_id=room_id, messages=messages).model_dump(mode="json"),
@@ -145,3 +145,12 @@ async def vote_endpoint(room_id: str, body: VoteRequest, db: Session = Depends(g
     payload = conflict.model_dump(mode="json")
     await manager.broadcast(room_id, make_message(MessageType.VOTE_RESULT, room_id, "system:supervisor", payload))
     return payload
+
+
+@app.post("/api/rooms/{room_id}/broadcast")
+async def internal_broadcast(room_id: str, payload: dict):
+    """Internal endpoint for other services to broadcast via WS."""
+    # We expect a pre-formatted payload or we wrap it
+    logger.info(f"📢 Internal broadcast for Room: {room_id}")
+    await manager.broadcast(room_id, payload)
+    return {"status": "ok"}

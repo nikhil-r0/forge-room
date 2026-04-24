@@ -1,11 +1,23 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
 
+from ..shared.settings import get_settings
 from .fallbacks import build_fallback_summary
 
+
+import json
+import logging
+
+# Setup Execution Bridge logger
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - [%(levelname)s] - %(name)s - %(message)s"
+)
+logger = logging.getLogger("execution_bridge")
 
 async def run_gemini_cli(
     spec: str,
@@ -15,37 +27,70 @@ async def run_gemini_cli(
     commit_message: str | None = None,
     push: bool = False,
 ) -> str:
+    settings = get_settings()
     prompt = _build_prompt(spec, decisions, repo_path, commit_message, push)
     executable = shutil.which("gemini")
+    logger.info(f"🚀 Execution Bridge: Target Repo -> {repo_path}")
+    
     if not executable:
+        logger.error("❌ Gemini CLI executable not found in PATH")
         if enable_fallbacks:
             return build_fallback_summary(spec, decisions)
         raise RuntimeError("Gemini CLI is not installed.")
 
+    # Prepare environment with correctly named API keys and workspace trust
+    env = os.environ.copy()
+    env["GEMINI_CLI_TRUST_WORKSPACE"] = "true"
+    if settings.gemini_api_key:
+        env["GEMINI_API_KEY"] = settings.gemini_api_key
+        env["GOOGLE_API_KEY"] = settings.gemini_api_key
+
+    cmd = [executable, "--approval-mode", "yolo", "--output-format", "json"]
+    logger.info(f"Running command: {' '.join(cmd)}")
+
     try:
-        # We pass the prompt via stdin. stdin=subprocess.PIPE + input=prompt 
-        # handles writing the input and closing stdin.
+        # Standard headless execution with YOLO mode to auto-apply changes
         result = subprocess.run(
-            [executable],
+            cmd,
             cwd=repo_path,
             input=prompt,
             capture_output=True,
             text=True,
-            # Removed timeout=120 as requested.
+            env=env,
         )
     except Exception as exc:
+        logger.exception("❌ Gemini CLI subprocess failed")
         if enable_fallbacks:
             return build_fallback_summary(spec, decisions)
         raise RuntimeError(f"Gemini CLI failed: {exc}")
 
     if result.returncode != 0:
-        # If it failed, we return stderr if available, or fallback
+        logger.error(f"❌ Gemini CLI exited with code {result.returncode}")
+        logger.error(f"STDOUT: {result.stdout}")
+        logger.error(f"STDERR: {result.stderr}")
+        
+        try:
+            error_data = json.loads(result.stdout)
+            if "error" in error_data:
+                raise RuntimeError(error_data["error"].get("message", "Unknown CLI error"))
+        except:
+            pass
+
         if enable_fallbacks:
             return build_fallback_summary(spec, decisions)
-        raise RuntimeError(result.stderr.strip() or "Gemini CLI failed.")
+        raise RuntimeError(result.stderr.strip() or f"Gemini CLI failed with code {result.returncode}")
 
-    # Return the full output as a summary of what it did.
-    return result.stdout.strip()
+    try:
+        data = json.loads(result.stdout)
+        summary = data.get("response", "No response returned from Gemini.")
+        logger.info("✅ Gemini CLI execution successful")
+        return summary
+    except json.JSONDecodeError:
+        logger.error("❌ Failed to parse Gemini CLI output as JSON")
+        logger.debug(f"RAW OUTPUT: {result.stdout}")
+        if enable_fallbacks:
+            return build_fallback_summary(spec, decisions)
+        raise RuntimeError("Failed to parse Gemini CLI output as JSON.")
 
 
 def _build_prompt(
@@ -73,8 +118,9 @@ LIVING SPEC:
 {spec}
 
 TASK:
-Implement the approved decisions in the codebase.{task_ext}
-Provide a complete summary of the changes you made and the logic behind them.
+You are running in a headless automation environment. Use your file management and shell tools to implement the approved decisions directly in the codebase at {repo_path}.{task_ext}
+
+After modifying the files, provide a complete summary of the changes you made and the logic behind them.
 """
 
 

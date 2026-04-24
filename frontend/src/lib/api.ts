@@ -64,33 +64,24 @@ export async function castVote(
 // ─── Code Execution (Execution Bridge :8001) ───
 
 export async function executeSpec(
+  roomId: string,
   specMarkdown: string,
-  approvedDecisions: DecisionPayload[]
-): Promise<{ diff: string; status: string }> {
+  approvedDecisions: DecisionPayload[],
+  commitMessage?: string,
+  push = false
+): Promise<{ summary: string; status: string }> {
   return json(`${EXECUTION}/api/execute-spec`, {
     method: "POST",
     body: JSON.stringify({
+      room_id: roomId,
       spec_markdown: specMarkdown,
       approved_decisions: approvedDecisions,
-    }),
-    signal: AbortSignal.timeout(60_000), // Gemini CLI can be slow
-  });
-}
-
-export async function applyDiff(
-  diffText: string,
-  commitMessage: string,
-  push = false
-): Promise<{ status: string; commit_hash: string | null }> {
-  return json(`${EXECUTION}/api/apply-diff`, {
-    method: "POST",
-    body: JSON.stringify({
-      diff_text: diffText,
       commit_message: commitMessage,
       push,
     }),
   });
 }
+
 
 // ─── Agent Invocation (Orchestrator :8000) ───
 

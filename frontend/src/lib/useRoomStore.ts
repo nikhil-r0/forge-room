@@ -38,7 +38,7 @@ interface RoomState {
   // ── UI State ──
   focusMode: boolean;
   timeSaved: number;
-  diffText: string;
+  executionSummary: string;
   isDiffModalOpen: boolean;
   isRiskModalOpen: boolean;
   isGenerating: boolean;
@@ -68,7 +68,7 @@ interface RoomState {
   setFocusMode: (mode: boolean) => void;
   incrementTimeSaved: (hours?: number) => void;
 
-  setDiffText: (diff: string) => void;
+  setExecutionSummary: (summary: string) => void;
   setDiffModalOpen: (open: boolean) => void;
   setRiskModalOpen: (open: boolean) => void;
   setGenerating: (generating: boolean) => void;
@@ -86,6 +86,7 @@ interface RoomState {
     blame_graph_nodes: BlameNode[];
     blame_graph_edges: BlameEdge[];
     last_drift_alerts: DriftAlertPayload[];
+    messages: { sender: string; message: string; timestamp: string }[];
   }) => void;
 
   reset: () => void;
@@ -106,7 +107,7 @@ const initialState = {
   driftAlerts: [] as DriftAlertPayload[],
   focusMode: false,
   timeSaved: 0,
-  diffText: "",
+  executionSummary: "",
   isDiffModalOpen: false,
   isRiskModalOpen: false,
   isGenerating: false,
@@ -159,7 +160,7 @@ export const useRoomStore = create<RoomState>((set) => ({
   incrementTimeSaved: (hours = 0.5) =>
     set((s) => ({ timeSaved: s.timeSaved + hours })),
 
-  setDiffText: (diff) => set({ diffText: diff }),
+  setExecutionSummary: (summary) => set({ executionSummary: summary }),
   setDiffModalOpen: (open) => set({ isDiffModalOpen: open }),
   setRiskModalOpen: (open) => set({ isRiskModalOpen: open }),
   setGenerating: (generating) => set({ isGenerating: generating }),
@@ -177,6 +178,18 @@ export const useRoomStore = create<RoomState>((set) => ({
       blameNodes: snapshot.blame_graph_nodes,
       blameEdges: snapshot.blame_graph_edges,
       driftAlerts: snapshot.last_drift_alerts,
+      messages: snapshot.messages.map((m) => ({
+        id: Math.random().toString(36).substr(2, 9),
+        type:
+          m.sender === "Supervisor"
+            ? "supervisor"
+            : m.sender.startsWith("@")
+            ? "agent_skill"
+            : "human",
+        sender: m.sender,
+        content: m.message,
+        timestamp: new Date(m.timestamp),
+      })),
       openConflicts: snapshot.pending_conflicts.filter((c) => !c.resolved)
         .length,
     }),

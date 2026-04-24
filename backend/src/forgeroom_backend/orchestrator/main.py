@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..shared.bootstrap import ensure_database, ensure_demo_repo
@@ -128,7 +131,7 @@ async def drift_check(room_id: str, body: DriftCheckRequest, db: Session = Depen
     )
 
 
-@app.get("/api/rooms/{room_id}/export", response_model=ExportResponse)
+@app.post("/api/rooms/{room_id}/export", response_model=ExportResponse)
 async def export_session(room_id: str, db: Session = Depends(get_db)) -> ExportResponse:
     room = get_room(db, room_id)
     if room is None:
@@ -140,3 +143,67 @@ async def export_session(room_id: str, db: Session = Depends(get_db)) -> ExportR
 
     save_export(db, room_id, markdown, risk_autopsy)
     return ExportResponse(room_id=room_id, markdown=markdown, risk_autopsy=risk_autopsy)
+
+
+class ExecuteSyncRequest(BaseModel):
+    summary: str
+
+
+@app.post("/api/rooms/{room_id}/sync-execution")
+async def sync_execution(room_id: str, body: ExecuteSyncRequest, db: Session = Depends(get_db)):
+    """Sync execution result to orchestrator memory and DB."""
+    from ..shared.repository import store_chat_messages
+    from ..websocket_gateway.publisher import make_message
+    from ..shared.contracts import MessageType
+    import httpx
+
+    summary = body.summary
+
+    # 1. Store in DB
+    msg_obj = {
+        "sender": "@Implementer",
+        "message": summary,
+        "timestamp": datetime.now(UTC).isoformat()
+    }
+    store_chat_messages(db, room_id, [msg_obj])
+
+    # 2. Broadcast via WS
+    try:
+        async with httpx.AsyncClient(timeout=None) as client:
+            await client.post(
+                f"{settings.websocket_url}/api/rooms/{room_id}/broadcast",
+                json=make_message(
+                    MessageType.CHAT,
+                    room_id,
+                    "agent:@Implementer",
+                    {"message": summary, "display_name": "Implementer (Gemini)"}
+                )
+            )
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to broadcast implementation message: {e}")
+
+    # 3. Process with Graph to update specimen
+    logger.info(f"🔄 Syncing execution summary into specimens for Room: {room_id}")
+    result = await graph.run(db, room_id)
+    
+    # 4. Broadcast spec update
+    try:
+        async with httpx.AsyncClient(timeout=None) as client:
+            await client.post(
+                f"{settings.websocket_url}/api/rooms/{room_id}/broadcast",
+                json=make_message(
+                    MessageType.SPEC_UPDATE,
+                    room_id,
+                    "system:supervisor",
+                    {
+                        "current_goal": result["current_goal"],
+                        "approved_decisions": result["approved_decisions"],
+                        "pending_tasks": result["pending_tasks"],
+                        "open_conflicts": len(result["pending_conflicts"]),
+                    }
+                )
+            )
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to broadcast spec update after sync: {e}")
+
+    return {"status": "synced", "snapshot": result}

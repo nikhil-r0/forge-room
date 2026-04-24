@@ -17,6 +17,7 @@ You MUST respond ONLY with a JSON object matching this exact schema:
     }}
   ],
   "new_tasks": ["<task string extracted from discussion>"],
+  "completed_tasks": ["<task string from the existing list that is now finished>"],
   "conflict_detected": <true or false>,
   "conflict": {{
     "summary": "<what the disagreement is about>",
@@ -33,6 +34,7 @@ Rules:
 - If no new decisions are found, return an empty new_decisions array.
 - Category must be one of: auth, database, api, frontend, infra, security, general.
 - Do NOT repeat existing approved decisions.
+- Messages from [@Implementer] indicate that tasks have been finished. Match them against the existing pending tasks and list them in "completed_tasks".
 """
 
 DRIFT_DETECTION_PROMPT = """You are an expert code reviewer detecting architectural contradictions.

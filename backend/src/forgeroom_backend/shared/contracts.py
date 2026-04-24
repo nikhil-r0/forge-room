@@ -139,6 +139,7 @@ class RoomSnapshot(BaseModel):
     blame_graph_nodes: list[BlameNode]
     blame_graph_edges: list[BlameEdge]
     last_drift_alerts: list[DriftAlertPayload]
+    messages: list[ChatMessageIn] = Field(default_factory=list)
     session_start: datetime
 
 
@@ -174,6 +175,7 @@ class VoteRequest(BaseModel):
 
 
 class ExecuteSpecRequest(BaseModel):
+    room_id: str
     spec_markdown: str
     approved_decisions: list[DecisionPayload]
     commit_message: str | None = None

@@ -17,7 +17,7 @@ import {
 import { cn } from "@/lib/utils"
 import { ConflictCard } from "@/components/chat/ConflictCard"
 import { SpecPanel } from "@/components/sidebar/SpecPanel"
-import { DiffModal } from "@/components/modals/DiffModal"
+import { ExecutionModal } from "@/components/modals/ExecutionModal"
 import { RiskAutopsyModal } from "@/components/modals/RiskAutopsyModal"
 import { ThemeToggle } from "@/components/ThemeToggle"
 import { DriftAlertCard } from "@/components/chat/DriftAlertCard"
@@ -85,26 +85,23 @@ function ChatRoomContent() {
   const searchParams = useSearchParams()
   const urlName = searchParams.get("name") || "Human"
 
-  const store = useRoomStore()
-  const {
-    displayName,
-    connected,
-    messages,
-    currentGoal,
-    approvedDecisions,
-    pendingTasks,
-    openConflicts,
-    blameNodes,
-    blameEdges,
-    focusMode,
-    timeSaved,
-    diffText,
-    isDiffModalOpen,
-    isRiskModalOpen,
-    isGenerating,
-    riskAutopsyMarkdown,
-    exportMarkdown,
-  } = store
+  const roomIdFromStore = useRoomStore((s) => s.roomId);
+  const displayName = useRoomStore((s) => s.displayName);
+  const connected = useRoomStore((s) => s.connected);
+  const messages = useRoomStore((s) => s.messages);
+  const currentGoal = useRoomStore((s) => s.currentGoal);
+  const approvedDecisions = useRoomStore((s) => s.approvedDecisions);
+  const pendingTasks = useRoomStore((s) => s.pendingTasks);
+  const openConflicts = useRoomStore((s) => s.openConflicts);
+  const focusMode = useRoomStore((s) => s.focusMode);
+  const timeSaved = useRoomStore((s) => s.timeSaved);
+  const isDiffModalOpen = useRoomStore((s) => s.isDiffModalOpen);
+  const isRiskModalOpen = useRoomStore((s) => s.isRiskModalOpen);
+  const isGenerating = useRoomStore((s) => s.isGenerating);
+  const riskAutopsyMarkdown = useRoomStore((s) => s.riskAutopsyMarkdown);
+  const exportMarkdown = useRoomStore((s) => s.exportMarkdown);
+  
+  const store = useRoomStore();
 
   const userName = displayName || urlName
   const [input, setInput] = useState("")
@@ -186,26 +183,14 @@ function ChatRoomContent() {
     setSkillUrl("")
   }
 
-  const handleGenerateCode = async () => {
-    store.setGenerating(true)
-    try {
-      const specMarkdown = `# ${currentGoal}\n\n## Decisions\n${approvedDecisions.map((d) => `- [${d.category}] ${d.description}`).join("\n")}\n\n## Tasks\n${pendingTasks.map((t) => `- ${t}`).join("\n")}`
-      const result = await executeSpec(specMarkdown, approvedDecisions)
-      store.setDiffText(result.diff)
-      store.setDiffModalOpen(true)
-    } catch (err) {
-      toast.error("Code generation failed", { description: String(err) })
-    } finally {
-      store.setGenerating(false)
-    }
+  const handleGenerateCode = () => {
+    store.setDiffModalOpen(true)
   }
 
-  const handleApproveDiff = (commitHash: string | null) => {
-    store.setDiffModalOpen(false)
-    store.incrementTimeSaved(0.5)
-    toast.success("Code Applied", {
-      description: `Committed: ${commitHash ?? "success"}`,
-    })
+  const handleExecutionSuccess = (summary: string) => {
+    store.setExecutionSummary(summary)
+    store.incrementTimeSaved(1.0) // Implementing code saves more time!
+    toast.success("Execution Complete")
   }
 
   const handleExport = async () => {
@@ -228,11 +213,12 @@ function ChatRoomContent() {
 
   return (
     <div className="flex flex-col h-screen bg-surface-dim text-on-surface font-sans antialiased overflow-hidden selection:bg-primary/30 transition-colors duration-500">
-      <DiffModal
+      <ExecutionModal
         isOpen={isDiffModalOpen}
         onClose={() => store.setDiffModalOpen(false)}
-        diff={diffText}
-        onApprove={handleApproveDiff}
+        specMarkdown={`# ${currentGoal}\n\n## Decisions\n${approvedDecisions.map((d) => `- [${d.category}] ${d.description}`).join("\n")}\n\n## Tasks\n${pendingTasks.map((t) => `- ${t}`).join("\n")}`}
+        approvedDecisions={approvedDecisions}
+        onSuccess={handleExecutionSuccess}
       />
 
       <RiskAutopsyModal
@@ -320,27 +306,7 @@ function ChatRoomContent() {
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* ─── Left Column: Blame Graph ─── */}
-        <aside className="w-72 bg-surface-container-low flex-col hidden xl:flex shrink-0 border-r border-surface-container-high/30">
-          <div className="p-4 bg-surface-container-highest">
-            <h2 className="text-label-sm font-bold uppercase tracking-widest text-on-surface-variant">
-              Blame Graph
-            </h2>
-          </div>
-          <div className="flex-1 relative overflow-hidden">
-            <Suspense
-              fallback={
-                <div className="flex items-center justify-center h-full">
-                  <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                </div>
-              }
-            >
-              <BlameGraph rawNodes={blameNodes} rawEdges={blameEdges} />
-            </Suspense>
-          </div>
-        </aside>
-
+      <div className="flex flex-1 overflow-hidden h-full">
         {/* ─── Main Chat Area ─── */}
         <main className="flex-1 flex flex-col relative bg-surface-dim shrink-0">
           <ScrollArea className="flex-1 px-8 py-6" ref={scrollRef}>

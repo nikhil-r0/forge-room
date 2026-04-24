@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from .blame import build_blame_graph
 from .contracts import (
     AgentPayload,
+    ChatMessageIn,
     ConflictPayload,
     DecisionCategory,
     DecisionPayload,
@@ -149,6 +150,19 @@ def add_pending_tasks(db: Session, room_id: str, tasks: list[str]) -> list[str]:
 def current_pending_tasks(db: Session, room_id: str) -> list[str]:
     room = get_room(db, room_id)
     return list(room.pending_tasks or [])
+
+
+def remove_pending_tasks(db: Session, room_id: str, tasks: list[str]) -> list[str]:
+    room = get_room(db, room_id)
+    existing = list(room.pending_tasks or [])
+    
+    # Fuzzy removal (case-insensitive and trimmed)
+    to_remove = {t.strip().lower() for t in tasks}
+    updated = [t for t in existing if t.strip().lower() not in to_remove]
+    
+    room.pending_tasks = updated
+    db.commit()
+    return updated
 
 
 def update_room_goal(db: Session, room_id: str, current_goal: str) -> None:
@@ -303,6 +317,10 @@ def snapshot_room(db: Session, room_id: str, new_decision_ids: set[str] | None =
         blame_graph_nodes=nodes,
         blame_graph_edges=edges,
         last_drift_alerts=list_drift_alerts(db, room_id),
+        messages=[
+            ChatMessageIn(sender=msg["sender"], message=msg["message"], timestamp=datetime.fromisoformat(msg["timestamp"]))
+            for msg in serialize_recent_chat(db, room_id)
+        ],
         session_start=room.session_start,
     )
 

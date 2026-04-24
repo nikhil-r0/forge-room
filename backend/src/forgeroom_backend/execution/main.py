@@ -42,4 +42,16 @@ async def execute_spec(body: ExecuteSpecRequest) -> ExecuteSpecResponse:
         commit_message=body.commit_message,
         push=body.push,
     )
+
+    # Sync back to Orchestrator
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=None) as client:
+            await client.post(
+                f"{settings.orchestrator_url}/api/rooms/{body.room_id}/sync-execution",
+                json={"summary": summary}
+            )
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to sync execution result to orchestrator: {e}")
+
     return ExecuteSpecResponse(summary=summary, status="success")
