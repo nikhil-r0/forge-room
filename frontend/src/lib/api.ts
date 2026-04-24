@@ -5,6 +5,7 @@ import type {
   DecisionPayload,
   ExportResponse,
   RoomSnapshot,
+  SkillPayload,
   VoteChoice,
 } from "./types";
 
@@ -47,6 +48,24 @@ export async function getRoom(roomId: string): Promise<RoomSnapshot> {
   return json(`${ORCHESTRATOR}/api/rooms/${roomId}`);
 }
 
+// ─── Skills (Orchestrator :8000) ───
+
+export async function addSkill(
+  roomId: string,
+  name: string,
+  content?: string,
+  sourceUrl?: string
+): Promise<SkillPayload> {
+  const body: Record<string, any> = { name };
+  if (content) body.content = content;
+  if (sourceUrl) body.source_url = sourceUrl;
+
+  return json(`${ORCHESTRATOR}/api/rooms/${roomId}/skills`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
 // ─── Voting (WS Gateway :8002) ───
 
 export async function castVote(
@@ -67,6 +86,7 @@ export async function executeSpec(
   roomId: string,
   specMarkdown: string,
   approvedDecisions: DecisionPayload[],
+  activeSkills: SkillPayload[] = [],
   commitMessage?: string,
   push = false
 ): Promise<{ summary: string; status: string }> {
@@ -76,6 +96,7 @@ export async function executeSpec(
       room_id: roomId,
       spec_markdown: specMarkdown,
       approved_decisions: approvedDecisions,
+      active_skills: activeSkills,
       commit_message: commitMessage,
       push,
     }),

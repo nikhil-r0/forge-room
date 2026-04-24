@@ -23,12 +23,13 @@ async def run_gemini_cli(
     spec: str,
     decisions: list[dict],
     repo_path: Path,
+    active_skills: list[dict] | None = None,
     enable_fallbacks: bool = True,
     commit_message: str | None = None,
     push: bool = False,
 ) -> str:
     settings = get_settings()
-    prompt = _build_prompt(spec, decisions, repo_path, commit_message, push)
+    prompt = _build_prompt(spec, decisions, repo_path, active_skills, commit_message, push)
     executable = shutil.which("gemini")
     logger.info(f"🚀 Execution Bridge: Target Repo -> {repo_path}")
     
@@ -97,11 +98,18 @@ def _build_prompt(
     spec: str,
     decisions: list[dict],
     repo_path: Path,
+    active_skills: list[dict] | None = None,
     commit_message: str | None = None,
     push: bool = False,
 ) -> str:
     snapshot = _read_codebase(repo_path)
     decisions_text = "\n".join(f"- {decision['description']}" for decision in decisions)
+    
+    skills_text = ""
+    if active_skills:
+        skills_text = "\nEXPERT SKILLS (Follow these rules strictly):\n"
+        for skill in active_skills:
+            skills_text += f"--- SKILL: {skill['name']} ---\n{skill['content']}\n"
     
     task_ext = ""
     if commit_message:
@@ -113,12 +121,13 @@ def _build_prompt(
 
 APPROVED DECISIONS:
 {decisions_text}
+{skills_text}
 
 LIVING SPEC:
 {spec}
 
 TASK:
-You are running in a headless automation environment. Use your file management and shell tools to implement the approved decisions directly in the codebase at {repo_path}.{task_ext}
+You are running in a headless automation environment. Use your file management and shell tools to implement the approved decisions directly in the codebase at {repo_path}. You MUST also follow all expert guidance provided in the EXPERT SKILLS section.{task_ext}
 
 After modifying the files, provide a complete summary of the changes you made and the logic behind them.
 """

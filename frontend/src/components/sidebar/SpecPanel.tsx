@@ -2,13 +2,14 @@
 
 import ReactMarkdown from "react-markdown"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Brain, ChevronRight, Focus, Loader2 } from "lucide-react"
-import type { DecisionPayload } from "@/lib/types"
+import { Brain, ChevronRight, Focus, Loader2, ShieldCheck } from "lucide-react"
+import type { DecisionPayload, SkillPayload } from "@/lib/types"
 
 interface SpecPanelProps {
   currentGoal: string
   approvedDecisions: DecisionPayload[]
   pendingTasks: string[]
+  activeSkills: SkillPayload[]
   openConflicts: number
   isLocked: boolean
   isGenerating: boolean
@@ -38,6 +39,7 @@ export function SpecPanel({
   currentGoal,
   approvedDecisions,
   pendingTasks,
+  activeSkills,
   openConflicts,
   isLocked,
   isGenerating,
@@ -151,6 +153,38 @@ export function SpecPanel({
                 </li>
               )}
             </ul>
+          </section>
+
+          {/* Expert Skills Section */}
+          <section className="space-y-4">
+            <h3 className="text-label-sm font-bold text-on-surface-variant uppercase tracking-widest flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-none bg-primary/80" />
+              Expert Skills
+              {activeSkills.length > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 text-[9px] rounded-sm bg-primary/20 text-primary font-bold">
+                  {activeSkills.length}
+                </span>
+              )}
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {activeSkills.map((skill) => (
+                <div
+                  key={skill.id}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-surface-container-highest border border-primary/20 hover:border-primary/40 transition-colors group cursor-help"
+                  title={skill.content.slice(0, 200) + "..."}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-primary group-hover:scale-110 transition-transform" />
+                  <span className="text-[11px] font-bold text-on-surface uppercase tracking-wider">
+                    {skill.name}
+                  </span>
+                </div>
+              ))}
+              {activeSkills.length === 0 && (
+                <p className="text-label-sm text-outline-variant italic uppercase tracking-widest">
+                  No skills registered.
+                </p>
+              )}
+            </div>
           </section>
         </div>
       </ScrollArea>

@@ -16,9 +16,10 @@ from .contracts import (
     DecisionPayload,
     DriftAlertPayload,
     RoomSnapshot,
+    SkillPayload,
     VoteChoice,
 )
-from .models import AgentRun, ChatMessage, Conflict, Decision, DecisionRelation, DriftAlert, ExportRecord, Room, Vote
+from .models import AgentRun, ChatMessage, Conflict, Decision, DecisionRelation, DriftAlert, ExportRecord, Room, Skill, Vote
 
 
 def create_room(db: Session, current_goal: str, focus_mode: bool) -> Room:
@@ -274,6 +275,28 @@ def list_drift_alerts(db: Session, room_id: str) -> list[DriftAlertPayload]:
     ]
 
 
+def add_skill(db: Session, room_id: str, name: str, content: str, source_url: str | None = None) -> Skill:
+    skill = Skill(room_id=room_id, name=name, content=content, source_url=source_url)
+    db.add(skill)
+    db.commit()
+    db.refresh(skill)
+    return skill
+
+
+def list_skills(db: Session, room_id: str) -> list[SkillPayload]:
+    skills = db.scalars(select(Skill).where(Skill.room_id == room_id).order_by(Skill.created_at.asc())).all()
+    return [
+        SkillPayload(
+            id=skill.id,
+            name=skill.name,
+            content=skill.content,
+            source_url=skill.source_url,
+            created_at=skill.created_at,
+        )
+        for skill in skills
+    ]
+
+
 def add_agent_run(db: Session, room_id: str, payload: AgentPayload) -> None:
     db.add(
         AgentRun(
@@ -317,6 +340,7 @@ def snapshot_room(db: Session, room_id: str, new_decision_ids: set[str] | None =
         blame_graph_nodes=nodes,
         blame_graph_edges=edges,
         last_drift_alerts=list_drift_alerts(db, room_id),
+        active_skills=list_skills(db, room_id),
         messages=[
             ChatMessageIn(sender=msg["sender"], message=msg["message"], timestamp=datetime.fromisoformat(msg["timestamp"]))
             for msg in serialize_recent_chat(db, room_id)

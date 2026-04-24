@@ -7,6 +7,7 @@ import type {
   ConflictPayload,
   DecisionPayload,
   DriftAlertPayload,
+  SkillPayload,
   UIMessage,
 } from "./types";
 
@@ -24,6 +25,7 @@ interface RoomState {
   approvedDecisions: DecisionPayload[];
   pendingTasks: string[];
   openConflicts: number;
+  activeSkills: SkillPayload[];
 
   // ── Blame Graph ──
   blameNodes: BlameNode[];
@@ -56,6 +58,7 @@ interface RoomState {
     approved_decisions: DecisionPayload[];
     pending_tasks: string[];
     open_conflicts: number;
+    active_skills?: SkillPayload[];
   }) => void;
 
   setBlameGraph: (nodes: BlameNode[], edges: BlameEdge[]) => void;
@@ -86,6 +89,7 @@ interface RoomState {
     blame_graph_nodes: BlameNode[];
     blame_graph_edges: BlameEdge[];
     last_drift_alerts: DriftAlertPayload[];
+    active_skills: SkillPayload[];
     messages: { sender: string; message: string; timestamp: string }[];
   }) => void;
 
@@ -101,6 +105,7 @@ const initialState = {
   approvedDecisions: [] as DecisionPayload[],
   pendingTasks: [] as string[],
   openConflicts: 0,
+  activeSkills: [] as SkillPayload[],
   blameNodes: [] as BlameNode[],
   blameEdges: [] as BlameEdge[],
   conflicts: [] as ConflictPayload[],
@@ -125,12 +130,13 @@ export const useRoomStore = create<RoomState>((set) => ({
     set((s) => ({ messages: [...s.messages, message] })),
 
   setSpecState: (data) =>
-    set({
+    set((s) => ({
       currentGoal: data.current_goal,
       approvedDecisions: data.approved_decisions ?? [],
       pendingTasks: data.pending_tasks ?? [],
       openConflicts: data.open_conflicts ?? 0,
-    }),
+      activeSkills: data.active_skills ?? s.activeSkills,
+    })),
 
   setBlameGraph: (nodes, edges) =>
     set({ blameNodes: nodes, blameEdges: edges }),
@@ -178,6 +184,7 @@ export const useRoomStore = create<RoomState>((set) => ({
       blameNodes: snapshot.blame_graph_nodes,
       blameEdges: snapshot.blame_graph_edges,
       driftAlerts: snapshot.last_drift_alerts,
+      activeSkills: snapshot.active_skills || [],
       messages: snapshot.messages.map((m) => ({
         id: Math.random().toString(36).substr(2, 9),
         type:

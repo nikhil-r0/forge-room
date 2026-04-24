@@ -16,15 +16,17 @@ from ..shared.contracts import (
     DriftCheckRequest,
     ExportResponse,
     RoomSnapshot,
+    SkillRequest,
 )
 from ..shared.database import ENGINE, get_db
 from ..shared.exporter import generate_markdown_export
-from ..shared.repository import create_room, get_room, snapshot_room
+from ..shared.repository import add_skill, create_room, get_room, snapshot_room
 from ..shared.settings import get_settings
 from .graph import ForgeRoomGraph
 from .nodes.agents.appsec import run_appsec_review
 from .nodes.drift_detector import run_drift_detection
 from .nodes.risk_autopsy import generate_risk_autopsy
+from .utils import fetch_skill_from_url
 
 
 import logging
@@ -129,6 +131,54 @@ async def drift_check(room_id: str, body: DriftCheckRequest, db: Session = Depen
         decision_id=None,
         provider=graph.provider,
     )
+
+
+@app.post("/api/rooms/{room_id}/skills")
+async def add_skill_endpoint(room_id: str, body: SkillRequest, db: Session = Depends(get_db)):
+    logger.info(f"📚 Adding new skill to Room: {room_id} | Source: {body.source_url or 'direct upload'}")
+    if get_room(db, room_id) is None:
+        raise HTTPException(status_code=404, detail="Room not found")
+    
+    content = body.content
+    if not content and body.source_url:
+        try:
+            content = await fetch_skill_from_url(body.source_url)
+        except Exception as e:
+            logger.error(f"❌ Failed to fetch skill from URL {body.source_url}: {e}")
+            raise HTTPException(status_code=400, detail=f"Failed to fetch skill from URL: {str(e)}")
+    
+    if not content:
+        raise HTTPException(status_code=400, detail="Skill content is required (either direct or via source_url)")
+
+    skill = add_skill(db, room_id, body.name, content, body.source_url)
+    
+    # Broadcast spec update to show new skill
+    from ..websocket_gateway.publisher import make_message
+    from ..shared.contracts import MessageType
+    import httpx
+
+    snapshot = snapshot_room(db, room_id)
+    try:
+        async with httpx.AsyncClient(timeout=None) as client:
+            await client.post(
+                f"{settings.websocket_url}/api/rooms/{room_id}/broadcast",
+                json=make_message(
+                    MessageType.SPEC_UPDATE,
+                    room_id,
+                    "system:orchestrator",
+                    {
+                        "current_goal": snapshot.current_goal,
+                        "approved_decisions": [d.model_dump(mode="json") for d in snapshot.approved_decisions],
+                        "pending_tasks": snapshot.pending_tasks,
+                        "open_conflicts": len(snapshot.pending_conflicts),
+                        "active_skills": [s.model_dump(mode="json") for s in snapshot.active_skills],
+                    }
+                )
+            )
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to broadcast spec update after skill addition: {e}")
+
+    return skill
 
 
 @app.post("/api/rooms/{room_id}/export", response_model=ExportResponse)

@@ -2,9 +2,14 @@ SUPERVISOR_PROMPT = """You are the AI Supervisor of a collaborative software arc
 
 CURRENT GOAL: {current_goal}
 EXISTING APPROVED DECISIONS: {existing_decisions}
+ACTIVE SKILLS (Expert Guidance):
+{active_skills}
+
 RECENT CHAT: {chat_history}
 
 TASK: Analyze the recent chat messages and extract architectural information.
+
+You MUST follow the expert guidance and rules provided in the ACTIVE SKILLS section when making decisions or recommending tasks.
 
 You MUST respond ONLY with a JSON object matching this exact schema:
 {{

@@ -112,6 +112,14 @@ class AgentPayload(BaseModel):
     referenced_files: list[str] = Field(default_factory=list)
 
 
+class SkillPayload(BaseModel):
+    id: int
+    name: str
+    content: str
+    source_url: str | None = None
+    created_at: datetime
+
+
 class StatusPayload(BaseModel):
     code: str
     detail: str
@@ -139,6 +147,7 @@ class RoomSnapshot(BaseModel):
     blame_graph_nodes: list[BlameNode]
     blame_graph_edges: list[BlameEdge]
     last_drift_alerts: list[DriftAlertPayload]
+    active_skills: list[SkillPayload] = Field(default_factory=list)
     messages: list[ChatMessageIn] = Field(default_factory=list)
     session_start: datetime
 
@@ -178,6 +187,7 @@ class ExecuteSpecRequest(BaseModel):
     room_id: str
     spec_markdown: str
     approved_decisions: list[DecisionPayload]
+    active_skills: list[SkillPayload] = Field(default_factory=list)
     commit_message: str | None = None
     push: bool = False
 
@@ -189,6 +199,12 @@ class ExecuteSpecResponse(BaseModel):
 
 class AgentRequest(BaseModel):
     agent_name: str
+
+
+class SkillRequest(BaseModel):
+    name: str
+    content: str | None = None
+    source_url: str | None = None
 
 
 class ExportResponse(BaseModel):

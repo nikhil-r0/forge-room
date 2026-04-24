@@ -7,10 +7,8 @@ src/forgeroom_backend.egg-info/dependency_links.txt
 src/forgeroom_backend.egg-info/requires.txt
 src/forgeroom_backend.egg-info/top_level.txt
 src/forgeroom_backend/execution/__init__.py
-src/forgeroom_backend/execution/diff_utils.py
 src/forgeroom_backend/execution/fallbacks.py
 src/forgeroom_backend/execution/gemini_cli.py
-src/forgeroom_backend/execution/git_ops.py
 src/forgeroom_backend/execution/main.py
 src/forgeroom_backend/orchestrator/__init__.py
 src/forgeroom_backend/orchestrator/graph.py
@@ -30,7 +28,6 @@ src/forgeroom_backend/shared/blame.py
 src/forgeroom_backend/shared/bootstrap.py
 src/forgeroom_backend/shared/contracts.py
 src/forgeroom_backend/shared/database.py
-src/forgeroom_backend/shared/demo_repo.py
 src/forgeroom_backend/shared/exporter.py
 src/forgeroom_backend/shared/models.py
 src/forgeroom_backend/shared/repository.py

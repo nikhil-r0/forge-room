@@ -1,6 +1,18 @@
-from __future__ import annotations
-
+import re
 from pathlib import Path
+
+import httpx
+
+
+async def fetch_skill_from_url(url: str) -> str:
+    # Normalize GitHub URLs to raw content if needed
+    if "github.com" in url and "/blob/" in url:
+        url = url.replace("github.com", "raw.githubusercontent.com").replace("/blob/", "/")
+    
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(url)
+        response.raise_for_status()
+        return response.text
 
 
 def build_codebase_snapshot(repo_path: Path, suffixes: set[str] | None = None, max_files: int = 8) -> str:

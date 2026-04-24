@@ -13,13 +13,14 @@ import { Check, Code2, Loader2, GitCommit, Rocket, Terminal } from "lucide-react
 import { executeSpec } from "@/lib/api"
 import { useRoomStore } from "@/lib/useRoomStore"
 import { toast } from "sonner"
-import type { DecisionPayload } from "@/lib/types"
+import type { DecisionPayload, SkillPayload } from "@/lib/types"
 
 interface ExecutionModalProps {
   isOpen: boolean
   onClose: () => void
   specMarkdown: string
   approvedDecisions: DecisionPayload[]
+  activeSkills: SkillPayload[]
   onSuccess: (summary: string) => void
 }
 
@@ -30,6 +31,7 @@ export function ExecutionModal({
   onClose, 
   specMarkdown, 
   approvedDecisions,
+  activeSkills,
   onSuccess 
 }: ExecutionModalProps) {
   const roomId = useRoomStore((s) => s.roomId)
@@ -45,7 +47,7 @@ export function ExecutionModal({
     }
     setStatus("running")
     try {
-      const result = await executeSpec(roomId, specMarkdown, approvedDecisions, commitMessage, push)
+      const result = await executeSpec(roomId, specMarkdown, approvedDecisions, activeSkills, commitMessage, push)
       setSummary(result.summary)
       setStatus("success")
       toast.success("Changes Applied Successfully")
