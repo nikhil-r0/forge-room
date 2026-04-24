@@ -1,0 +1,113 @@
+Metadata-Version: 2.4
+Name: forgeroom-backend
+Version: 0.1.0
+Summary: ForgeRoom backend and AI services
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: alembic>=1.13.2
+Requires-Dist: fastapi>=0.115.0
+Requires-Dist: gitpython>=3.1.43
+Requires-Dist: httpx>=0.27.2
+Requires-Dist: pydantic>=2.9.2
+Requires-Dist: pydantic-settings>=2.5.2
+Requires-Dist: python-dotenv>=1.0.1
+Requires-Dist: sqlalchemy>=2.0.35
+Requires-Dist: uvicorn>=0.30.6
+Provides-Extra: ai
+Requires-Dist: langchain-google-genai>=2.0.0; extra == "ai"
+Requires-Dist: langgraph>=0.2.35; extra == "ai"
+Provides-Extra: test
+Requires-Dist: pytest>=8.3.3; extra == "test"
+
+## ForgeRoom Backend
+
+This directory contains the backend and AI implementation for ForgeRoom.
+
+### Services
+
+- `forgeroom_backend.orchestrator.main:app`
+  - FastAPI service on `:8000`
+  - room lifecycle
+  - supervisor processing
+  - drift detection
+  - AppSec agent
+  - risk autopsy + export
+- `forgeroom_backend.execution.main:app`
+  - FastAPI service on `:8001`
+  - diff generation
+  - diff validation
+  - git apply + commit
+- `forgeroom_backend.websocket_gateway.main:app`
+  - FastAPI/WebSocket service on `:8002`
+  - realtime room chat
+  - debounced orchestrator batching
+  - vote broadcasting
+
+### Layout
+
+- `src/forgeroom_backend/shared`
+  - shared contracts
+  - SQLAlchemy models
+  - repository helpers
+  - export generation
+  - demo repo bootstrap
+- `src/forgeroom_backend/orchestrator`
+  - AI provider abstraction
+  - supervisor/drift/risk/AppSec nodes
+- `src/forgeroom_backend/execution`
+  - Gemini CLI wrapper
+  - fallback diff generation
+  - diff validation
+  - git operations
+- `src/forgeroom_backend/websocket_gateway`
+  - connection manager
+  - debounce buffer
+  - websocket publishing
+
+### Local Setup
+
+From this directory:
+
+```bash
+pip install -e ".[test]"
+```
+
+Optional AI dependencies:
+
+```bash
+pip install -e ".[ai]"
+```
+
+### Run
+
+```bash
+uvicorn forgeroom_backend.orchestrator.main:app --reload --port 8000
+uvicorn forgeroom_backend.execution.main:app --reload --port 8001
+uvicorn forgeroom_backend.websocket_gateway.main:app --reload --port 8002
+```
+
+### Configuration
+
+Environment variables use the `FORGEROOM_` prefix.
+
+- `FORGEROOM_DATABASE_URL`
+- `FORGEROOM_TARGET_REPO_PATH`
+- `FORGEROOM_ORCHESTRATOR_URL`
+- `FORGEROOM_ALLOW_GIT_PUSH`
+- `FORGEROOM_ENABLE_DEMO_FALLBACKS`
+- `FORGEROOM_GEMINI_API_KEY`
+- `FORGEROOM_GEMINI_MODEL`
+
+### Migrations
+
+Alembic files live in `alembic/`.
+
+```bash
+alembic upgrade head
+```
+
+### Tests
+
+```bash
+pytest tests -q
+```

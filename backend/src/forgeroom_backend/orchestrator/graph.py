@@ -25,9 +25,15 @@ class ForgeRoomGraph:
             )
             if drift.get("drift_detected"):
                 drift_alerts.append(drift)
+
         if drift_alerts:
-            state = state | repository_snapshot(db, room_id)
-            state["last_drift_alerts"] = repository_snapshot(db, room_id)["last_drift_alerts"]
+            # Refresh snapshot to get updated state including new drift alerts
+            snapshot = repository_snapshot(db, room_id)
+            # Merge: keep the supervisor's state but update blame graph and drift alerts
+            state["blame_graph_nodes"] = snapshot["blame_graph_nodes"]
+            state["blame_graph_edges"] = snapshot["blame_graph_edges"]
+            state["last_drift_alerts"] = snapshot["last_drift_alerts"]
+
         return state
 
 

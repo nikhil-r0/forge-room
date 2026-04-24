@@ -59,9 +59,6 @@ APPROVED DECISIONS:
 LIVING SPEC:
 {spec}
 
-CURRENT CODEBASE:
-{snapshot}
-
 TASK:
 Generate a valid unified git diff that implements the approved decisions.
 Output only the diff.
