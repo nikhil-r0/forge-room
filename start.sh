@@ -27,20 +27,21 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# ─── Check venv ───
-if [ ! -d "$VENV" ]; then
-  echo -e "${RED}Python venv not found at $VENV${NC}"
-  echo "Run: cd $BACKEND_DIR && uv venv && uv pip install -e '.[ai]'"
-  exit 1
+# ─── Ensure Backend Sync ───
+echo -e "${GREEN}[0/4] Syncing backend dependencies...${NC}"
+cd "$BACKEND_DIR"
+if command -v uv &> /dev/null; then
+  uv sync
+else
+  # Fallback to standard pip if uv isn't installed
+  python3 -m venv .venv --upgrade-deps
+  .venv/bin/pip install -e .
 fi
+cd "$SCRIPT_DIR"
 
 PYTHON="$VENV/bin/python"
 UVICORN="$VENV/bin/uvicorn"
 
-if [ ! -f "$UVICORN" ]; then
-  echo -e "${RED}uvicorn not found in venv. Installing...${NC}"
-  "$VENV/bin/pip" install -e "$BACKEND_DIR[ai]"
-fi
 
 # ─── Load .env ───
 if [ -f "$SCRIPT_DIR/.env" ]; then

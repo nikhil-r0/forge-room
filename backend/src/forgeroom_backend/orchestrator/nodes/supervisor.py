@@ -7,10 +7,18 @@ from ..providers import AIProvider
 
 
 async def supervisor_node(db: Session, room_id: str, provider: AIProvider) -> dict:
+    import logging
+    logger = logging.getLogger("orchestrator.node.supervisor")
+    
     room = repository.get_room(db, room_id)
     chat_history = repository.serialize_recent_chat(db, room_id)
     existing_decisions = repository.list_decisions(db, room_id)
+    
+    logger.debug(f"Analyzing room {room_id}. Goal: {room.current_goal}. Msg count: {len(chat_history)}")
+    
     result = await provider.analyze_supervisor(chat_history, existing_decisions, room.current_goal)
+    
+    logger.debug(f"Supervisor Reasoning Result: {result}")
 
     if result.get("new_goal"):
         repository.update_room_goal(db, room_id, result["new_goal"])

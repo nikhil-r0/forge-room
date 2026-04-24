@@ -24,9 +24,24 @@ from .nodes.drift_detector import run_drift_detection
 from .nodes.risk_autopsy import generate_risk_autopsy
 
 
+import logging
+
+# Setup orchestrator logger FIRST
+# We use a simple level check to avoid re-configuring if already done
+logging.basicConfig(
+    level=logging.INFO, # Will be elevated to DEBUG in get_settings check if needed
+    format="%(asctime)s - [%(levelname)s] - %(name)s - %(message)s"
+)
+logger = logging.getLogger("orchestrator")
+
 settings = get_settings()
+# Update level based on settings
+if settings.debug_mode:
+    logger.setLevel(logging.DEBUG)
+
 graph = ForgeRoomGraph()
 app = FastAPI(title="ForgeRoom Orchestrator")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -43,14 +58,22 @@ def startup() -> None:
 
 @app.post("/api/rooms", response_model=CreateRoomResponse)
 async def create_room_endpoint(body: CreateRoomRequest, db: Session = Depends(get_db)) -> CreateRoomResponse:
-    room = create_room(db, body.current_goal, body.focus_mode)
-    return CreateRoomResponse(room_id=room.id)
+    logger.info(f"🆕 Creating new room with goal: {body.current_goal[:50]}...")
+    try:
+        room = create_room(db, body.current_goal, body.focus_mode)
+        logger.info(f"✅ Room created: {room.id}")
+        return CreateRoomResponse(room_id=room.id)
+    except Exception as e:
+        logger.error(f"❌ Failed to create room: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Database error durante room creation")
 
 
 @app.get("/api/rooms/{room_id}", response_model=RoomSnapshot)
 async def get_room_endpoint(room_id: str, db: Session = Depends(get_db)) -> RoomSnapshot:
+    logger.info(f"🔍 Fetching snapshot for Room: {room_id}")
     room = get_room(db, room_id)
     if room is None:
+        logger.warning(f"🚫 Room not found: {room_id}")
         raise HTTPException(status_code=404, detail="Room not found")
     return snapshot_room(db, room_id)
 
@@ -60,16 +83,35 @@ async def process_batch(body: ChatBatchRequest, db: Session = Depends(get_db)):
     room = get_room(db, body.room_id)
     if room is None:
         raise HTTPException(status_code=404, detail="Room not found")
-    return await graph.run(db, body.room_id)
+    
+    try:
+        logger.info(f"🚀 Starting Orchestrator Run for Room: {body.room_id} | Batch size: {len(body.messages)}")
+        # Since ForgeRoomGraph.run manages its own nodes internally, 
+        # we log the overall progress of the run.
+        result = await graph.run(db, body.room_id)
+        
+        logger.info(f"✅ Orchestrator Run Completed. Goals: {result.get('current_goal')} | Decisions found: {len(result.get('approved_decisions', []))}")
+        return result
+    except Exception as e:
+        logger.error(f"❌ Orchestrator CRASHED for Room {body.room_id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Orchestrator error: {str(e)}")
 
 
 @app.post("/api/rooms/{room_id}/agent")
 async def agent_endpoint(room_id: str, body: AgentRequest, db: Session = Depends(get_db)):
+    logger.info(f"🤖 Invoking agent '{body.agent_name}' for Room: {room_id}")
     if get_room(db, room_id) is None:
         raise HTTPException(status_code=404, detail="Room not found")
     if body.agent_name.lower() != "appsec":
         raise HTTPException(status_code=400, detail="Unsupported agent")
-    return await run_appsec_review(db, room_id, graph.provider)
+    
+    try:
+        result = await run_appsec_review(db, room_id, graph.provider)
+        logger.info(f"✅ Agent '{body.agent_name}' response received.")
+        return result
+    except Exception as e:
+        logger.error(f"❌ Agent execution failed: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
 
 
 @app.post("/api/rooms/{room_id}/drift-check")

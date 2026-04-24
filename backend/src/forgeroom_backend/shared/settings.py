@@ -117,6 +117,7 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-1.5-flash"
     gemini_api_key: str | None = None
     service_timeout_seconds: int = 30
+    debug_mode: bool = False
 
     @property
     def target_repo(self) -> Path:
@@ -127,17 +128,21 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     settings = Settings()
     # Log configuration source for visibility
-    print(f"\n[Settings] Loading configuration (env_file={settings.model_config.get('env_file')})")
+    env_file = settings.model_config.get("env_file")
+    print(f"\n[Settings] Loading configuration (env_file={env_file})")
     
     prefix = settings.model_config.get("env_prefix", "")
-    for field_name in Settings.model_fields:
+    # To detect if it was loaded from env, we compare with class defaults
+    # but that's complex. Instead, we can check if it's in the env file if we parse it again.
+    
+    # Simpler: just show the final values in debug mode
+    for field_name, value in settings.model_dump().items():
         env_key = f"{prefix}{field_name.upper()}"
-        if env_key in os.environ:
-            print(f"  ✓ {field_name:25} from OS_ENV ({env_key})")
+        source = "OS_ENV" if env_key in os.environ else "FILE/DEFAULT"
+        if "key" in field_name.lower() or "token" in field_name.lower():
+            display_val = "***" if value else "None"
         else:
-            # Check if it was in the resolved .env file (if using the manual fallback)
-            # Or just check if the current value is different from default (harder without more logic)
-            # For simplicity, we just check OS_ENV and mention Default otherwise
-            print(f"  - {field_name:25} using DEFAULT")
+            display_val = value
+        print(f"  ✓ {field_name:25} = {display_val} ({source})")
     print("")
     return settings

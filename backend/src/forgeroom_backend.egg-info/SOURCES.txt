@@ -40,6 +40,8 @@ src/forgeroom_backend/websocket_gateway/connection_manager.py
 src/forgeroom_backend/websocket_gateway/debounce.py
 src/forgeroom_backend/websocket_gateway/main.py
 src/forgeroom_backend/websocket_gateway/publisher.py
+tests/test_core_functionalities.py
 tests/test_execution_bridge.py
+tests/test_execution_detailed.py
 tests/test_orchestrator_logic.py
 tests/test_repository.py

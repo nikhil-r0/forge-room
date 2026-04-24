@@ -20,7 +20,14 @@ async def run_drift_detection(
 ) -> dict:
     repo_path = get_settings().target_repo
     snapshot = build_targeted_snapshot(repo_path, category)
+    
+    import logging
+    logger = logging.getLogger("orchestrator.node.drift")
+    logger.debug(f"Checking drift for '{proposed_decision[:40]}...' against snapshot ({len(snapshot)} chars)")
+    
     result = await provider.detect_drift(proposed_decision, snapshot)
+    
+    logger.debug(f"Drift Reasoning Result: {result}")
     if not result.get("drift_detected"):
         return result
 

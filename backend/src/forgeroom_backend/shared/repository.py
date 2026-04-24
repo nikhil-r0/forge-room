@@ -73,7 +73,7 @@ def list_decisions(db: Session, room_id: str) -> list[dict]:
     return [
         {
             "id": decision.id,
-            "timestamp": decision.created_at,
+            "timestamp": decision.created_at.isoformat() if decision.created_at else None,
             "description": decision.description,
             "category": decision.category,
             "depends_on": depends_by_id.get(decision.id, []),

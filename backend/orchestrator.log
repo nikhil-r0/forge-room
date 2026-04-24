@@ -1,0 +1,22 @@
+INFO:     Started server process [153973]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+ERROR:    [Errno 98] error while attempting to bind on address ('0.0.0.0', 8000): address already in use
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+
+[Settings] Loading configuration (env_file=/mnt/extra-maal/forge-room/.env)
+  - app_name                  using DEFAULT
+  - database_url              using DEFAULT
+  - cors_origins              using DEFAULT
+  - debounce_seconds          using DEFAULT
+  - orchestrator_url          using DEFAULT
+  - websocket_url             using DEFAULT
+  - target_repo_path          using DEFAULT
+  - allow_git_push            using DEFAULT
+  - enable_demo_fallbacks     using DEFAULT
+  - gemini_model              using DEFAULT
+  - gemini_api_key            using DEFAULT
+  - service_timeout_seconds   using DEFAULT
+  - debug_mode                using DEFAULT
+

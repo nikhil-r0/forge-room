@@ -13,11 +13,13 @@ Requires-Dist: pydantic-settings>=2.5.2
 Requires-Dist: python-dotenv>=1.0.1
 Requires-Dist: sqlalchemy>=2.0.35
 Requires-Dist: uvicorn>=0.30.6
-Provides-Extra: ai
-Requires-Dist: langchain-google-genai>=2.0.0; extra == "ai"
-Requires-Dist: langgraph>=0.2.35; extra == "ai"
-Provides-Extra: test
-Requires-Dist: pytest>=8.3.3; extra == "test"
+Requires-Dist: langchain-google-genai>=2.0.0
+Requires-Dist: langgraph>=0.2.35
+Requires-Dist: pytest>=8.3.3
+Requires-Dist: uvloop>=0.22.1
+Requires-Dist: httptools>=0.7.1
+Requires-Dist: watchfiles>=1.1.1
+Requires-Dist: python-multipart>=0.0.9
 
 ## ForgeRoom Backend
 

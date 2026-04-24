@@ -7,10 +7,10 @@ pydantic-settings>=2.5.2
 python-dotenv>=1.0.1
 sqlalchemy>=2.0.35
 uvicorn>=0.30.6
-
-[ai]
 langchain-google-genai>=2.0.0
 langgraph>=0.2.35
-
-[test]
 pytest>=8.3.3
+uvloop>=0.22.1
+httptools>=0.7.1
+watchfiles>=1.1.1
+python-multipart>=0.0.9
