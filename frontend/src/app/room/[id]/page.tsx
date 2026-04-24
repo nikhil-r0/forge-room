@@ -68,7 +68,7 @@ function MessageBubble({ message }: { message: UIMessage }) {
             ? "bg-surface-container-highest text-on-surface"
             : "bg-surface-container-low text-on-surface",
           isSupervisor &&
-            "bg-tertiary-container/10 shadow-[0_0_15px_rgba(254,177,39,0.1)] relative before:absolute before:inset-0 before:ring-1 before:ring-tertiary-container/30 before:rounded-md",
+          "bg-tertiary-container/10 shadow-[0_0_15px_rgba(254,177,39,0.1)] relative before:absolute before:inset-0 before:ring-1 before:ring-tertiary-container/30 before:rounded-md",
           isAgent && "bg-surface-container-high"
         )}
       >
@@ -80,7 +80,7 @@ function MessageBubble({ message }: { message: UIMessage }) {
 
 // ─── Main Room Component ───
 
-export default function ChatRoom() {
+function ChatRoomContent() {
   const { id: roomId } = useParams<{ id: string }>()
   const searchParams = useSearchParams()
   const urlName = searchParams.get("name") || "Human"
@@ -111,6 +111,7 @@ export default function ChatRoom() {
   const [skillUrl, setSkillUrl] = useState("")
   const [loaded, setLoaded] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const hasUnresolvedConflict = store.conflicts.some((c) => !c.resolved)
 
@@ -156,9 +157,7 @@ export default function ChatRoom() {
 
   // Auto-scroll on new messages
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
   // ─── Handlers ───
@@ -368,6 +367,7 @@ export default function ChatRoom() {
                 }
                 return <MessageBubble key={msg.id} message={msg} />
               })}
+              <div ref={messagesEndRef} className="h-4" />
             </div>
           </ScrollArea>
 
@@ -446,5 +446,17 @@ export default function ChatRoom() {
         </aside>
       </div>
     </div>
+  )
+}
+
+export default function ChatRoom() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-surface flex items-center justify-center">
+        <Loader2 className="w-10 h-10 animate-spin text-primary" />
+      </div>
+    }>
+      <ChatRoomContent />
+    </Suspense>
   )
 }
