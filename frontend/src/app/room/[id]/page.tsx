@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback, Suspense, lazy } from "react"
+import ReactMarkdown from "react-markdown"
 import { useParams, useSearchParams } from "next/navigation"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { toast } from "sonner"
@@ -24,7 +25,8 @@ import { DriftAlertCard } from "@/components/chat/DriftAlertCard"
 import { QRSharePanel } from "@/components/room/QRSharePanel"
 import { useRoomStore } from "@/lib/useRoomStore"
 import { connectWebSocket, disconnectWebSocket, sendMessage } from "@/lib/websocket"
-import { getRoom, executeSpec, exportSession, invokeAgent } from "@/lib/api"
+import { getRoom, executeSpec, exportSession, invokeAgent, getMe } from "@/lib/api"
+import { AuthModal } from "@/components/modals/AuthModal"
 import type { UIMessage, ConflictPayload, DriftAlertPayload } from "@/lib/types"
 
 // Lazy-load React Flow to avoid SSR issues
@@ -53,7 +55,7 @@ function MessageBubble({ message }: { message: UIMessage }) {
         )}
         {isHuman && (
           <span className="text-label-sm text-on-surface-variant uppercase tracking-widest">
-            {message.sender}
+            {message.display_name || message.sender}
           </span>
         )}
         <span className="text-[10px] text-outline-variant opacity-0 group-hover:opacity-100 transition-opacity">
@@ -72,7 +74,9 @@ function MessageBubble({ message }: { message: UIMessage }) {
           isAgent && "bg-surface-container-high"
         )}
       >
-        {message.content}
+        <div className="prose prose-sm dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:bg-surface-container-highest prose-pre:border prose-pre:border-outline-variant/30">
+          <ReactMarkdown>{message.content}</ReactMarkdown>
+        </div>
       </div>
     </div>
   )
@@ -100,7 +104,7 @@ function ChatRoomContent() {
   const isGenerating = useRoomStore((s) => s.isGenerating);
   const riskAutopsyMarkdown = useRoomStore((s) => s.riskAutopsyMarkdown);
   const exportMarkdown = useRoomStore((s) => s.exportMarkdown);
-  
+  const currentUser = useRoomStore((s) => s.currentUser);
   const store = useRoomStore();
 
   const userName = displayName || urlName
@@ -114,33 +118,49 @@ function ChatRoomContent() {
 
   // ─── Initialize: load room + connect WS ───
   useEffect(() => {
-    if (!roomId || loaded) return
+    if (!roomId) return
 
     const init = async () => {
+      // First, try to fetch current user if not present
+      if (!currentUser) {
+        try {
+          const me = await getMe()
+          store.setCurrentUser(me)
+          return // Effect will re-run with currentUser set
+        } catch (err) {
+          // Stay in Guest mode until AuthModal is used
+        }
+      }
+
       try {
+        const userName = currentUser?.username || "Human"
+        const userId = currentUser?.user_id || "Guest-" + Math.random().toString(36).slice(2, 6)
+
+        // Prevent double init if same user
+        if (loaded && store.roomId === roomId && store.displayName === userName) return
+
         // Set room info
         store.setRoom(roomId as string, userName)
 
-        // Load existing state from backend
+        // Load existing state
         const snapshot = await getRoom(roomId as string)
         store.hydrateFromSnapshot(snapshot)
 
-        // Add a welcome message
-        store.addMessage({
-          id: "welcome",
-          type: "supervisor",
-          sender: "Supervisor",
-          content: `Welcome to ForgeRoom. I'm monitoring this session for architectural conflicts.`,
-          timestamp: new Date(),
-        })
+        if (!loaded) {
+          store.addMessage({
+            id: "welcome",
+            type: "supervisor",
+            sender: "Supervisor",
+            content: `Welcome to ForgeRoom, ${userName}.`,
+            timestamp: new Date(),
+          })
+        }
 
-        // Connect WebSocket
-        connectWebSocket(roomId as string, userName)
+        // Connect WebSocket using user_id
+        connectWebSocket(roomId as string, userId)
         setLoaded(true)
-      } catch {
-        toast.error("Failed to load room", {
-          description: "The room may not exist. Redirecting...",
-        })
+      } catch (err) {
+        console.error("Room initialization failed", err)
       }
     }
 
@@ -149,8 +169,7 @@ function ChatRoomContent() {
     return () => {
       disconnectWebSocket()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId])
+  }, [roomId, currentUser])
 
   // Auto-scroll on new messages
   useEffect(() => {
@@ -213,6 +232,7 @@ function ChatRoomContent() {
 
   return (
     <div className="flex flex-col h-screen bg-surface-dim text-on-surface font-sans antialiased overflow-hidden selection:bg-primary/30 transition-colors duration-500">
+      <AuthModal />
       <ExecutionModal
         isOpen={isDiffModalOpen}
         onClose={() => store.setDiffModalOpen(false)}

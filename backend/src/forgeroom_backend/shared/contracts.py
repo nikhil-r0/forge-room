@@ -63,8 +63,19 @@ class ConflictPayload(BaseModel):
     option_b: str
     context: str
     votes: dict[str, VoteChoice] = Field(default_factory=dict)
+    votes_tally: dict[str, int] = Field(default_factory=dict)
     resolved: bool = False
     winner: VoteChoice | None = None
+
+
+class SignupRequest(BaseModel):
+    username: str
+    password: str
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
 
 class SpecPayload(BaseModel):
@@ -185,6 +196,7 @@ class ExecuteSpecRequest(BaseModel):
 class ExecuteSpecResponse(BaseModel):
     summary: str
     status: str
+    snapshot: RoomSnapshot | None = None
 
 
 class AgentRequest(BaseModel):

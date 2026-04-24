@@ -107,9 +107,10 @@ function routeMessage(data: Record<string, unknown>) {
       const displayName =
         (payload.display_name as string) ?? senderId.replace("user:", "");
       const msg: UIMessage = {
-        id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2),
+        id: (data.id as string) || (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2)),
         type: "human",
-        sender: displayName,
+        sender: senderId,
+        display_name: displayName,
         content: (payload.message as string) ?? "",
         timestamp: new Date(data.timestamp as string),
       };
@@ -119,21 +120,26 @@ function routeMessage(data: Record<string, unknown>) {
 
     case MessageType.SPEC_UPDATE: {
       console.log("[WS] SPEC_UPDATE received:", payload);
+      const goalChanged = payload.current_goal && payload.current_goal !== store.currentGoal;
+      
       store.setSpecState(payload as {
         current_goal: string;
         approved_decisions: DecisionPayload[];
         pending_tasks: string[];
         open_conflicts: number;
       });
-      // Add supervisor message to chat
-      const specMsg: UIMessage = {
-        id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2),
-        type: "supervisor",
-        sender: "Supervisor",
-        content: `Spec updated. Current goal: ${payload.current_goal ?? ""}`,
-        timestamp: new Date(data.timestamp as string),
-      };
-      store.addMessage(specMsg);
+
+      // Only add supervisor message to chat if goal changed
+      if (goalChanged) {
+        const specMsg: UIMessage = {
+          id: (data.id as string) || (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2)),
+          type: "supervisor",
+          sender: "Supervisor",
+          content: `Architectural goal updated: **${payload.current_goal}**`,
+          timestamp: new Date(data.timestamp as string),
+        };
+        store.addMessage(specMsg);
+      }
       break;
     }
 

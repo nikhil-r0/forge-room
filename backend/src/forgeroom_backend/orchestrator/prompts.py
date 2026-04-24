@@ -34,7 +34,7 @@ Rules:
 - If no new decisions are found, return an empty new_decisions array.
 - Category must be one of: auth, database, api, frontend, infra, security, general.
 - Do NOT repeat existing approved decisions.
-- Messages from [@Implementer] indicate that tasks have been finished. Match them against the existing pending tasks and list them in "completed_tasks".
+- Messages from [@Implementer] explain what has been built. Compare these explanations with the "RECENT CHAT" and "EXISTING APPROVED DECISIONS". If a pending task is semantically finished (even if described differently in the chat), include its EXACT string from the current task list in the "completed_tasks" array.
 """
 
 DRIFT_DETECTION_PROMPT = """You are an expert code reviewer detecting architectural contradictions.

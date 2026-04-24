@@ -32,8 +32,14 @@ export interface ConflictPayload {
   option_b: string;
   context: string;
   votes: Record<string, VoteChoice>;
+  votes_tally: Record<string, number>;
   resolved: boolean;
   winner: VoteChoice | null;
+}
+
+export interface User {
+  user_id: string;
+  username: string;
 }
 
 export interface BlameNode {
@@ -115,6 +121,7 @@ export interface UIMessage {
   id: string;
   type: UIMessageType;
   sender: string;
+  display_name?: string;
   content: string;
   timestamp: Date;
   payload?: Record<string, unknown>;

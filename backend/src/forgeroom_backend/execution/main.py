@@ -44,14 +44,17 @@ async def execute_spec(body: ExecuteSpecRequest) -> ExecuteSpecResponse:
     )
 
     # Sync back to Orchestrator
+    sync_snapshot = None
     try:
         import httpx
         async with httpx.AsyncClient(timeout=None) as client:
-            await client.post(
+            sync_res = await client.post(
                 f"{settings.orchestrator_url}/api/rooms/{body.room_id}/sync-execution",
                 json={"summary": summary}
             )
+            if sync_res.is_success:
+                sync_snapshot = sync_res.json().get("snapshot")
     except Exception as e:
         logger.warning(f"⚠️ Failed to sync execution result to orchestrator: {e}")
 
-    return ExecuteSpecResponse(summary=summary, status="success")
+    return ExecuteSpecResponse(summary=summary, status="success", snapshot=sync_snapshot)

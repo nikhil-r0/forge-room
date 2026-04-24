@@ -47,6 +47,9 @@ export function ExecutionModal({
     try {
       const result = await executeSpec(roomId, specMarkdown, approvedDecisions, commitMessage, push)
       setSummary(result.summary)
+      if (result.snapshot) {
+        useRoomStore.getState().hydrateFromSnapshot(result.snapshot)
+      }
       setStatus("success")
       toast.success("Changes Applied Successfully")
     } catch (err) {

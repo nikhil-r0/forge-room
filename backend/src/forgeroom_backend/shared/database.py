@@ -12,8 +12,21 @@ Base = declarative_base()
 def build_engine(database_url: str | None = None):
     settings = get_settings()
     url = database_url or settings.database_url
-    connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
-    return create_engine(url, future=True, connect_args=connect_args)
+    
+    is_sqlite = url.startswith("sqlite")
+    connect_args = {"check_same_thread": False} if is_sqlite else {}
+    
+    if is_sqlite:
+        return create_engine(url, future=True, connect_args=connect_args)
+    
+    return create_engine(
+        url, 
+        future=True, 
+        connect_args=connect_args,
+        pool_size=20,
+        max_overflow=10,
+        pool_timeout=60
+    )
 
 
 ENGINE = build_engine()

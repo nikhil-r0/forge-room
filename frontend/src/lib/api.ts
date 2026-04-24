@@ -6,6 +6,9 @@ import type {
   ExportResponse,
   RoomSnapshot,
   VoteChoice,
+  User,
+  SignupRequest,
+  LoginRequest,
 } from "./types";
 
 const getBaseUrl = (port: number, protocol = "http") => {
@@ -106,4 +109,24 @@ export async function exportSession(
   roomId: string
 ): Promise<ExportResponse> {
   return json(`${ORCHESTRATOR}/api/rooms/${roomId}/export`);
+}
+
+// ─── Authentication (Orchestrator :8000) ───
+
+export async function signup(username: string, password: string): Promise<{ user_id: string }> {
+  return json(`${ORCHESTRATOR}/api/auth/signup`, {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+}
+
+export async function login(username: string, password: string): Promise<User> {
+  return json(`${ORCHESTRATOR}/api/auth/login`, {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+}
+
+export async function getMe(): Promise<User> {
+  return json(`${ORCHESTRATOR}/api/auth/me`);
 }

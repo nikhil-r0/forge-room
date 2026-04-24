@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Response, Cookie
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+import uuid
 
 from ..shared.bootstrap import ensure_database, ensure_demo_repo
 from ..shared.contracts import (
@@ -16,6 +17,8 @@ from ..shared.contracts import (
     DriftCheckRequest,
     ExportResponse,
     RoomSnapshot,
+    SignupRequest,
+    LoginRequest,
 )
 from ..shared.database import ENGINE, get_db
 from ..shared.exporter import generate_markdown_export
@@ -145,6 +148,49 @@ async def export_session(room_id: str, db: Session = Depends(get_db)) -> ExportR
     return ExportResponse(room_id=room_id, markdown=markdown, risk_autopsy=risk_autopsy)
 
 
+@app.post("/api/auth/signup")
+async def signup(body: SignupRequest, db: Session = Depends(get_db)):
+    from ..shared.models import User
+    from sqlalchemy import select
+    
+    existing = db.scalar(select(User).where(User.username == body.username))
+    if existing:
+        raise HTTPException(status_code=400, detail="Username already taken")
+    
+    user = User(id=str(uuid.uuid4()), username=body.username, password_hash=body.password)  # Dummy hashing
+    db.add(user)
+    db.commit()
+    return {"status": "success", "user_id": user.id}
+
+
+@app.post("/api/auth/login")
+async def login(body: LoginRequest, response: Response, db: Session = Depends(get_db)):
+    from ..shared.models import User
+    from sqlalchemy import select
+    
+    user = db.scalar(select(User).where(User.username == body.username, User.password_hash == body.password))
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    response.set_cookie(key="user_id", value=user.id, httponly=True, samesite="lax")
+    response.set_cookie(key="username", value=user.username, samesite="lax")
+    return {"status": "success", "username": user.username, "user_id": user.id}
+
+
+@app.get("/api/auth/me")
+async def get_me(user_id: str | None = Cookie(None), username: str | None = Cookie(None)):
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    return {"user_id": user_id, "username": username}
+
+
+@app.post("/api/auth/logout")
+async def logout(response: Response):
+    response.delete_cookie("user_id")
+    response.delete_cookie("username")
+    return {"status": "success"}
+
+
 class ExecuteSyncRequest(BaseModel):
     summary: str
 
@@ -185,6 +231,12 @@ async def sync_execution(room_id: str, body: ExecuteSyncRequest, db: Session = D
     # 3. Process with Graph to update specimen
     logger.info(f"🔄 Syncing execution summary into specimens for Room: {room_id}")
     result = await graph.run(db, room_id)
+    
+    resolved = result.get("completed_tasks", [])
+    if resolved:
+        logger.info(f"✅ Supervisor resolved {len(resolved)} tasks: {resolved}")
+    else:
+        logger.info("ℹ️ Supervisor found no completed tasks in this cycle.")
     
     # 4. Broadcast spec update
     try:

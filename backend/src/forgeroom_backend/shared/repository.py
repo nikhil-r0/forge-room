@@ -201,6 +201,10 @@ def list_conflicts(db: Session, room_id: str) -> list[ConflictPayload]:
             option_b=conflict.option_b,
             context=conflict.context,
             votes=votes_by_conflict.get(conflict.id, {}),
+            votes_tally={
+                "a": sum(1 for v in votes_by_conflict.get(conflict.id, {}).values() if v == VoteChoice.A),
+                "b": sum(1 for v in votes_by_conflict.get(conflict.id, {}).values() if v == VoteChoice.B),
+            },
             resolved=conflict.resolved,
             winner=VoteChoice(conflict.winner) if conflict.winner else None,
         )

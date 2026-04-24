@@ -8,6 +8,7 @@ import type {
   DecisionPayload,
   DriftAlertPayload,
   UIMessage,
+  User,
 } from "./types";
 
 interface RoomState {
@@ -15,6 +16,7 @@ interface RoomState {
   roomId: string | null;
   displayName: string;
   connected: boolean;
+  currentUser: User | null;
 
   // ── Chat ──
   messages: UIMessage[];
@@ -90,6 +92,7 @@ interface RoomState {
   }) => void;
 
   reset: () => void;
+  setCurrentUser: (user: User | null) => void;
 }
 
 const initialState = {
@@ -113,6 +116,7 @@ const initialState = {
   isGenerating: false,
   riskAutopsyMarkdown: "",
   exportMarkdown: "",
+  currentUser: null as User | null,
 };
 
 export const useRoomStore = create<RoomState>((set) => ({
@@ -122,7 +126,12 @@ export const useRoomStore = create<RoomState>((set) => ({
   setConnected: (connected) => set({ connected }),
 
   addMessage: (message) =>
-    set((s) => ({ messages: [...s.messages, message] })),
+    set((s) => {
+      // Deduplicate by ID just in case
+      if (s.messages.some(m => m.id === message.id)) return s;
+      const sorted = [...s.messages, message].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+      return { messages: sorted };
+    }),
 
   setSpecState: (data) =>
     set({
@@ -195,4 +204,5 @@ export const useRoomStore = create<RoomState>((set) => ({
     }),
 
   reset: () => set(initialState),
+  setCurrentUser: (user) => set({ currentUser: user }),
 }));

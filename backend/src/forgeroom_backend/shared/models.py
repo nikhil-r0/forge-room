@@ -13,6 +13,14 @@ def utc_now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+class User(Base):
+    __tablename__ = "users"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    username: Mapped[str] = mapped_column(String, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String)  # In a real app we'd salt/hash properly
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+
+
 class Room(Base):
     __tablename__ = "rooms"
 

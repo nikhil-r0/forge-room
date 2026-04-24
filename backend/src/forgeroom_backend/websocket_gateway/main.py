@@ -80,10 +80,9 @@ async def on_batch_ready(room_id: str, messages: list[dict]) -> None:
                 },
             ),
         )
-        for conflict in result.get("pending_conflicts", []):
-            await manager.broadcast(room_id, make_message(MessageType.CONFLICT, room_id, "system:supervisor", conflict))
-        for alert in result.get("last_drift_alerts", []):
-            await manager.broadcast(room_id, make_message(MessageType.DRIFT_ALERT, room_id, "system:supervisor", alert))
+        # We rely on the frontend to show these in the 'Specs' panel or as dynamic notifications.
+        # Avoid spamming the chat with already-known conflicts.
+        # (Optional: only send if we have a way to track 'newness' here)
     except Exception as e:
         logger.error(f"❌ Error during batch processing for Room {room_id}: {str(e)}", exc_info=True)
 
@@ -106,8 +105,10 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, user_id: str, d
         while True:
             raw = await websocket.receive_text()
             payload = json.loads(raw).get("payload", {})
+            display_name = payload.get("display_name", user_id)
             message = {
                 "sender": user_id,
+                "display_name": display_name,
                 "message": payload.get("message", ""),
                 "timestamp": payload.get("timestamp"),
             }
@@ -122,7 +123,7 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, user_id: str, d
                     MessageType.CHAT,
                     room_id,
                     f"user:{user_id}",
-                    {"message": message["message"], "display_name": payload.get("display_name", user_id)},
+                    {"message": message["message"], "display_name": display_name},
                 ),
             )
             await debounce.add_message(room_id, message)

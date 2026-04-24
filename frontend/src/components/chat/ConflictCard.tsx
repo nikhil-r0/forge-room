@@ -12,18 +12,19 @@ interface ConflictCardProps {
 }
 
 export function ConflictCard({ conflict }: ConflictCardProps) {
-  const { roomId, displayName } = useRoomStore()
+  const { roomId, currentUser } = useRoomStore()
   const [voting, setVoting] = useState(false)
-  const myVote = conflict.votes[displayName] ?? null
-  const voteCountA = Object.values(conflict.votes).filter((v) => v === "a").length
-  const voteCountB = Object.values(conflict.votes).filter((v) => v === "b").length
-  const totalVoters = Object.keys(conflict.votes).length
+  
+  const myVote = currentUser ? conflict.votes[currentUser.user_id] ?? null : null
+  const voteCountA = conflict.votes_tally["a"] || 0
+  const voteCountB = conflict.votes_tally["b"] || 0
+  const totalVoters = voteCountA + voteCountB
 
   const handleVote = async (option: VoteChoice) => {
-    if (myVote || !roomId || voting) return
+    if (!currentUser || myVote || !roomId || voting) return
     setVoting(true)
     try {
-      await castVote(roomId, conflict.conflict_id, displayName, option)
+      await castVote(roomId, conflict.conflict_id, currentUser.user_id, option)
     } catch (err) {
       toast.error("Vote failed", { description: String(err) })
     } finally {
