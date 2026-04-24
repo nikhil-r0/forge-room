@@ -88,6 +88,14 @@ export interface SpecPayload {
   open_conflicts: number;
 }
 
+export interface SkillPayload {
+  id: number;
+  name: string;
+  content: string;
+  source_url?: string;
+  created_at: string;
+}
+
 export interface RoomSnapshot {
   room_id: string;
   current_goal: string;
@@ -98,6 +106,7 @@ export interface RoomSnapshot {
   blame_graph_nodes: BlameNode[];
   blame_graph_edges: BlameEdge[];
   last_drift_alerts: DriftAlertPayload[];
+  active_skills: SkillPayload[];
   messages: { sender: string; message: string; timestamp: string }[];
   session_start: string;
 }

@@ -21,6 +21,7 @@ REST endpoints:
 - `POST /api/process-batch` (orchestrator): input `ChatBatchRequest`, output room state dict
 - `POST /api/rooms/{room_id}/agent` (orchestrator): input `AgentRequest`, output `AgentPayload`
 - `POST /api/rooms/{room_id}/drift-check` (orchestrator): input `DriftCheckRequest`, output drift result dict
+- `POST /api/rooms/{room_id}/skills` (orchestrator): input `SkillRequest`, output `SkillPayload`
 - `GET /api/rooms/{room_id}/export` (orchestrator): output `ExportResponse`
 - `POST /api/execute-spec` (execution): input `ExecuteSpecRequest`, output `ExecuteSpecResponse`
 - `POST /api/apply-diff` (execution): input `ApplyDiffRequest`, output `ApplyDiffResponse`
@@ -68,7 +69,9 @@ WebSocket:
 - `add_conflict(summary, option_a, option_b, context) -> Conflict`
 - `cast_vote(conflict_id, user_id, choice) -> ConflictPayload` (also resolves winner)
 - `add_drift_alert(...) -> DriftAlert`
-- `snapshot_room(room_id, new_decision_ids?) -> RoomSnapshot`
+- `add_skill(name, content, source_url?) -> Skill`
+- `list_skills(room_id) -> list[SkillPayload]`
+- `snapshot_room(room_id, new_decision_ids?) -> RoomSnapshot` (includes `active_skills`)
 
 ### `orchestrator/`
 
@@ -79,7 +82,7 @@ WebSocket:
 | `orchestrator/state.py` | TypedDict state shape for orchestration pipeline | Internal state maps | Type hints only |
 | `orchestrator/prompts.py` | Prompt templates for supervisor, drift, risk autopsy, AppSec | Chat history / code snapshots / decisions | Prompt strings |
 | `orchestrator/providers.py` | AI provider abstraction + fallback heuristics when Gemini unavailable | Chat history, decisions, code snapshot text | Parsed structured outputs for supervisor, drift, risk report, appsec |
-| `orchestrator/utils.py` | Codebase snapshot builders (generic and category-targeted) | `repo_path`, category, limits | Snapshot text with file markers + line numbers |
+| `orchestrator/utils.py` | Codebase snapshot builders and Skill URL fetcher (GitHub raw normalization) | `repo_path`, category, URL | Snapshot text or skill markdown content |
 | `orchestrator/nodes/supervisor.py` | Applies supervisor result to DB: goal, decisions, tasks, conflicts | `db`, `room_id`, `AIProvider` | Updated state dict + pending drift checks |
 | `orchestrator/nodes/drift_detector.py` | Runs drift detection and stores drift alerts/contradictions | decision text/category + snapshot via provider | Drift result dict; writes drift alerts |
 | `orchestrator/nodes/risk_autopsy.py` | Generates risk report from decisions/conflicts/drift stats | `db`, `room_id`, `AIProvider` | Markdown report string |
@@ -144,9 +147,72 @@ Cross-checked against:
 
 6. Documentation drift (low)
 - Root `README.md` points to a different absolute path (`/home/loki/projects/athernex/...`), inconsistent with this repo location.
-- PDFs mention optional features (skill URL fetcher, UI choices) that are only partially implemented in current code.
 
-## 5) Test Status (Current Local Run)
+## 5) Frontend Integration Guide (Skills)
+
+To integrate the Skill feature with your frontend, follow these steps:
+
+### A. Update Types
+Add `SkillPayload` and update `RoomSnapshot` in `frontend/src/lib/types.ts`.
+
+```typescript
+export interface SkillPayload {
+  id: number;
+  name: string;
+  content: string;
+  source_url?: string;
+  created_at: string;
+}
+
+export interface RoomSnapshot {
+  // ... existing fields
+  active_skills: SkillPayload[];
+}
+```
+
+### B. Add API Methods
+In `frontend/src/lib/api.ts`, add the skill creation method.
+
+```typescript
+export async function addSkill(roomId: string, name: string, content?: string, sourceUrl?: string) {
+  const response = await fetch(`${ORCHESTRATOR_URL}/api/rooms/${roomId}/skills`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, content, source_url: sourceUrl }),
+  });
+  return response.json();
+}
+```
+
+### C. Sync State
+Update `useRoomStore.ts` to include `activeSkills` and handle `SPEC_UPDATE` broadcasts.
+
+```typescript
+// Initial state
+activeSkills: [],
+
+// In updateFromSnapshot
+activeSkills: snapshot.active_skills || [],
+
+// In SPEC_UPDATE handler
+if (payload.active_skills) {
+  set({ activeSkills: payload.active_skills });
+}
+```
+
+### D. Update Execution Call
+When triggering the Execution Bridge (`/api/execute-spec`), ensure you pass the `active_skills`.
+
+```typescript
+await executeSpec({
+  room_id: roomId,
+  spec_markdown: currentSpec,
+  approved_decisions: approvedDecisions,
+  active_skills: activeSkills, // Crucial for Implementer guidance
+});
+```
+
+## 6) Test Status (Current Local Run)
 
 Executed on `2026-04-24`:
 

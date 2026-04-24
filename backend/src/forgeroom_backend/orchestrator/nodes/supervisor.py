@@ -13,10 +13,16 @@ async def supervisor_node(db: Session, room_id: str, provider: AIProvider) -> di
     room = repository.get_room(db, room_id)
     chat_history = repository.serialize_recent_chat(db, room_id)
     existing_decisions = repository.list_decisions(db, room_id)
+    active_skills = repository.list_skills(db, room_id)
     
-    logger.debug(f"Analyzing room {room_id}. Goal: {room.current_goal}. Msg count: {len(chat_history)}")
+    logger.debug(f"Analyzing room {room_id}. Goal: {room.current_goal}. Msg count: {len(chat_history)}. Skills: {len(active_skills)}")
     
-    result = await provider.analyze_supervisor(chat_history, existing_decisions, room.current_goal)
+    result = await provider.analyze_supervisor(
+        chat_history, 
+        existing_decisions, 
+        room.current_goal,
+        active_skills=[s.model_dump(mode="json") for s in active_skills]
+    )
     
     logger.debug(f"Supervisor Reasoning Result: {result}")
 

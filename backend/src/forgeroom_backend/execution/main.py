@@ -37,6 +37,7 @@ async def execute_spec(body: ExecuteSpecRequest) -> ExecuteSpecResponse:
     summary = await run_gemini_cli(
         spec=body.spec_markdown,
         decisions=[decision.model_dump(mode="json") for decision in body.approved_decisions],
+        active_skills=[skill.model_dump(mode="json") for skill in body.active_skills],
         repo_path=settings.target_repo,
         enable_fallbacks=settings.enable_demo_fallbacks,
         commit_message=body.commit_message,

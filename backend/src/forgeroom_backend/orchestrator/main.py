@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import uuid
 
+from ..shared import repository
 from ..shared.bootstrap import ensure_database, ensure_demo_repo
 from ..shared.contracts import (
     AgentRequest,
@@ -19,15 +20,17 @@ from ..shared.contracts import (
     RoomSnapshot,
     SignupRequest,
     LoginRequest,
+    SkillRequest,
 )
 from ..shared.database import ENGINE, get_db
 from ..shared.exporter import generate_markdown_export
-from ..shared.repository import create_room, get_room, snapshot_room
+from ..shared.repository import add_skill, create_room, get_room, snapshot_room
 from ..shared.settings import get_settings
 from .graph import ForgeRoomGraph
 from .nodes.agents.appsec import run_appsec_review
 from .nodes.drift_detector import run_drift_detection
 from .nodes.risk_autopsy import generate_risk_autopsy
+from .utils import fetch_skill_from_url
 
 
 import logging
@@ -108,16 +111,47 @@ async def agent_endpoint(room_id: str, body: AgentRequest, db: Session = Depends
     logger.info(f"🤖 Invoking agent '{body.agent_name}' for Room: {room_id}")
     if get_room(db, room_id) is None:
         raise HTTPException(status_code=404, detail="Room not found")
-    if body.agent_name.lower() != "appsec":
-        raise HTTPException(status_code=400, detail="Unsupported agent")
     
-    try:
-        result = await run_appsec_review(db, room_id, graph.provider)
-        logger.info(f"✅ Agent '{body.agent_name}' response received.")
-        return result
-    except Exception as e:
-        logger.error(f"❌ Agent execution failed: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
+    # 1. Check for specialized 'appsec' agent
+    if body.agent_name.lower() == "appsec":
+        try:
+            result = await run_appsec_review(db, room_id, graph.provider)
+            logger.info(f"✅ Agent '{body.agent_name}' response received.")
+            return result
+        except Exception as e:
+            logger.error(f"❌ Agent execution failed: {str(e)}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
+
+    # 2. Check for dynamic skill-based agents
+    skills = repository.list_skills(db, room_id)
+    # Match exactly or by prefix (e.g., @React matching 'react-specialist')
+    matching_skill = next(
+        (s for s in skills if s.name.lower() == body.agent_name.lower() or s.name.lower().startswith(body.agent_name.lower())), 
+        None
+    )
+    
+    if matching_skill:
+        try:
+            decisions = repository.list_decisions(db, room_id)
+            # Use general snapshot for dynamic skills
+            from .utils import build_codebase_snapshot
+            snapshot = build_codebase_snapshot(get_settings().target_repo)
+            
+            result = await graph.provider.invoke_skill_agent(
+                agent_name=matching_skill.name,
+                skill_content=matching_skill.content,
+                approved_decisions=decisions,
+                snapshot=snapshot
+            )
+            
+            # Record the run
+            repository.add_agent_run(db, room_id, result)
+            return result
+        except Exception as e:
+            logger.error(f"❌ Skill Agent '{body.agent_name}' failed: {str(e)}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Skill Agent error: {str(e)}")
+
+    raise HTTPException(status_code=400, detail=f"Agent or Skill '{body.agent_name}' not found.")
 
 
 @app.post("/api/rooms/{room_id}/drift-check")
@@ -132,6 +166,54 @@ async def drift_check(room_id: str, body: DriftCheckRequest, db: Session = Depen
         decision_id=None,
         provider=graph.provider,
     )
+
+
+@app.post("/api/rooms/{room_id}/skills")
+async def add_skill_endpoint(room_id: str, body: SkillRequest, db: Session = Depends(get_db)):
+    logger.info(f"📚 Adding new skill to Room: {room_id} | Source: {body.source_url or 'direct upload'}")
+    if get_room(db, room_id) is None:
+        raise HTTPException(status_code=404, detail="Room not found")
+    
+    content = body.content
+    if not content and body.source_url:
+        try:
+            content = await fetch_skill_from_url(body.source_url)
+        except Exception as e:
+            logger.error(f"❌ Failed to fetch skill from URL {body.source_url}: {e}")
+            raise HTTPException(status_code=400, detail=f"Failed to fetch skill from URL: {str(e)}")
+    
+    if not content:
+        raise HTTPException(status_code=400, detail="Skill content is required (either direct or via source_url)")
+
+    skill = add_skill(db, room_id, body.name, content, body.source_url)
+    
+    # Broadcast spec update to show new skill
+    from ..websocket_gateway.publisher import make_message
+    from ..shared.contracts import MessageType
+    import httpx
+
+    snapshot = snapshot_room(db, room_id)
+    try:
+        async with httpx.AsyncClient(timeout=None) as client:
+            await client.post(
+                f"{settings.websocket_url}/api/rooms/{room_id}/broadcast",
+                json=make_message(
+                    MessageType.SPEC_UPDATE,
+                    room_id,
+                    "system:orchestrator",
+                    {
+                        "current_goal": snapshot.current_goal,
+                        "approved_decisions": [d.model_dump(mode="json") for d in snapshot.approved_decisions],
+                        "pending_tasks": snapshot.pending_tasks,
+                        "open_conflicts": len(snapshot.pending_conflicts),
+                        "active_skills": [s.model_dump(mode="json") for s in snapshot.active_skills],
+                    }
+                )
+            )
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to broadcast spec update after skill addition: {e}")
+
+    return skill
 
 
 @app.post("/api/rooms/{room_id}/export", response_model=ExportResponse)

@@ -3,7 +3,7 @@
 import { toast } from "sonner";
 import { useRoomStore } from "./useRoomStore";
 import { MessageType } from "./types";
-import type { UIMessage, ConflictPayload, DriftAlertPayload, DecisionPayload } from "./types";
+import type { UIMessage, ConflictPayload, DriftAlertPayload, DecisionPayload, SkillPayload } from "./types";
 
 const getWsUrl = (port: number) => {
   if (typeof window !== "undefined") {
@@ -127,6 +127,7 @@ function routeMessage(data: Record<string, unknown>) {
         approved_decisions: DecisionPayload[];
         pending_tasks: string[];
         open_conflicts: number;
+        active_skills?: SkillPayload[];
       });
 
       // Only add supervisor message to chat if goal changed

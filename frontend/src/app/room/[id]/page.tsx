@@ -25,7 +25,7 @@ import { DriftAlertCard } from "@/components/chat/DriftAlertCard"
 import { QRSharePanel } from "@/components/room/QRSharePanel"
 import { useRoomStore } from "@/lib/useRoomStore"
 import { connectWebSocket, disconnectWebSocket, sendMessage } from "@/lib/websocket"
-import { getRoom, executeSpec, exportSession, invokeAgent, getMe } from "@/lib/api"
+import { getRoom, executeSpec, exportSession, invokeAgent, getMe, addSkill } from "@/lib/api"
 import { AuthModal } from "@/components/modals/AuthModal"
 import type { UIMessage, ConflictPayload, DriftAlertPayload } from "@/lib/types"
 
@@ -97,6 +97,7 @@ function ChatRoomContent() {
   const approvedDecisions = useRoomStore((s) => s.approvedDecisions);
   const pendingTasks = useRoomStore((s) => s.pendingTasks);
   const openConflicts = useRoomStore((s) => s.openConflicts);
+  const activeSkills = useRoomStore((s) => s.activeSkills);
   const focusMode = useRoomStore((s) => s.focusMode);
   const timeSaved = useRoomStore((s) => s.timeSaved);
   const isDiffModalOpen = useRoomStore((s) => s.isDiffModalOpen);
@@ -110,6 +111,7 @@ function ChatRoomContent() {
   const userName = displayName || urlName
   const [input, setInput] = useState("")
   const [skillUrl, setSkillUrl] = useState("")
+  const [skillName, setSkillName] = useState("")
   const [loaded, setLoaded] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -183,7 +185,7 @@ function ChatRoomContent() {
     sendMessage({ message: input, display_name: userName })
 
     // Check for agent invocations
-    const agentMatch = input.match(/@(\w+)/i)
+    const agentMatch = input.match(/@([\w-]+)/i)
     if (agentMatch) {
       const agentName = agentMatch[1]
       invokeAgent(roomId as string, agentName).catch(() =>
@@ -194,12 +196,29 @@ function ChatRoomContent() {
     setInput("")
   }, [input, userName, roomId])
 
-  const handleAddSkill = () => {
+  const handleAddSkill = async () => {
     if (!skillUrl.trim()) return
-    toast.success("New Agent Ready", {
-      description: `@${skillUrl.split("/").pop()?.replace(".md", "") || "NewAgent"} has been registered.`,
-    })
-    setSkillUrl("")
+    
+    // Default name from URL if name field is empty
+    const finalName = skillName.trim() || skillUrl.split("/").pop()?.replace(".md", "") || "NewAgent"
+    
+    // Duplicate check
+    const isDuplicate = activeSkills.some(s => s.name.toLowerCase() === finalName.toLowerCase())
+    if (isDuplicate) {
+      toast.error("Duplicate Skill", { description: `A skill named "${finalName}" is already registered.` })
+      return
+    }
+
+    try {
+      await addSkill(roomId as string, finalName, undefined, skillUrl)
+      toast.success("New Agent Ready", {
+        description: `@${finalName} has been registered.`,
+      })
+      setSkillUrl("")
+      setSkillName("")
+    } catch (err) {
+      toast.error("Failed to register agent", { description: String(err) })
+    }
   }
 
   const handleGenerateCode = () => {
@@ -238,6 +257,7 @@ function ChatRoomContent() {
         onClose={() => store.setDiffModalOpen(false)}
         specMarkdown={`# ${currentGoal}\n\n## Decisions\n${approvedDecisions.map((d) => `- [${d.category}] ${d.description}`).join("\n")}\n\n## Tasks\n${pendingTasks.map((t) => `- ${t}`).join("\n")}`}
         approvedDecisions={approvedDecisions}
+        activeSkills={activeSkills}
         onSuccess={handleExecutionSuccess}
       />
 
@@ -362,6 +382,15 @@ function ChatRoomContent() {
             <div className="max-w-3xl mx-auto space-y-4">
               {/* Skill Adder */}
               <div className="flex gap-2 items-center">
+                <div className="relative w-48 group/skill-name">
+                  <input
+                    type="text"
+                    placeholder="Skill Name (Optional)"
+                    className="w-full px-3 py-2 bg-surface-container-lowest text-label-sm text-on-surface placeholder:text-outline-variant border border-transparent focus:border-outline-variant/30 focus:outline-none rounded-sm transition-all"
+                    value={skillName}
+                    onChange={(e) => setSkillName(e.target.value)}
+                  />
+                </div>
                 <div className="relative flex-1 group/skill">
                   <Plus className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-outline-variant" />
                   <input
@@ -424,6 +453,7 @@ function ChatRoomContent() {
             currentGoal={currentGoal}
             approvedDecisions={approvedDecisions}
             pendingTasks={pendingTasks}
+            activeSkills={activeSkills}
             openConflicts={openConflicts}
             isLocked={hasUnresolvedConflict}
             isGenerating={isGenerating}

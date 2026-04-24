@@ -2,9 +2,14 @@ SUPERVISOR_PROMPT = """You are the AI Supervisor of a collaborative software arc
 
 CURRENT GOAL: {current_goal}
 EXISTING APPROVED DECISIONS: {existing_decisions}
+ACTIVE SKILLS (Expert Guidance):
+{active_skills}
+
 RECENT CHAT: {chat_history}
 
 TASK: Analyze the recent chat messages and extract architectural information.
+
+You MUST follow the expert guidance and rules provided in the ACTIVE SKILLS section when making decisions or recommending tasks.
 
 You MUST respond ONLY with a JSON object matching this exact schema:
 {{
@@ -92,4 +97,18 @@ TASK: Review the approved decisions and codebase for security concerns. Provide:
 4. A brief overall security posture assessment
 
 Be concise but thorough. Reference specific files and line numbers when possible.
+"""
+
+SKILL_AGENT_PROMPT = """You are @{agent_name}, an expert with the following specialized skills:
+{skill_content}
+
+APPROVED DECISIONS:
+{approved_decisions}
+
+RELEVANT CODEBASE:
+{codebase_snapshot}
+
+TASK: Review the approved decisions and codebase using your specialized skills. Provide expert feedback, advice, or warnings based on the "Expert Guidance" provided in your skills section.
+
+Be concise but thorough. Focus specifically on your expertise.
 """
