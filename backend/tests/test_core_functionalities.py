@@ -241,6 +241,7 @@ class TestExecutionBridge:
 
     def test_fallback_diff_generates_valid_unified_diff(self):
         diff = build_fallback_diff("Implement auth flow", self.DECISIONS)
+        print(f"\n[DEBUG] Core Fallback Diff:\n{diff}\n[DEBUG] End of Diff")
         assert diff.startswith("--- /dev/null")
         assert "+++ b/forgeroom_generated.md" in diff
         assert "@@ -0,0" in diff
@@ -252,6 +253,7 @@ class TestExecutionBridge:
             diff = asyncio.run(
                 run_gemini_cli("Build auth.", self.DECISIONS, repo_path, enable_fallbacks=True)
             )
+        print(f"\n[DEBUG] Core Gemini CLI Fallback Diff:\n{diff}\n[DEBUG] End of Diff")
         assert diff.startswith("--- ")
         assert "JWT" in diff
 
@@ -280,6 +282,7 @@ class TestExecutionBridge:
             diff = asyncio.run(
                 run_gemini_cli("Build auth.", self.DECISIONS, repo_path, enable_fallbacks=True)
             )
+        print(f"\n[DEBUG] Core Apply Diff:\n{diff}\n[DEBUG] End of Diff")
         validate_diff(diff, repo_path)
         commit_hash, status = asyncio.run(
             apply_diff_and_commit(diff, "Test commit", repo_path, push=False)

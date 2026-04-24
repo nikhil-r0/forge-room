@@ -23,6 +23,9 @@ async def _execution_case(temp_db_and_repo):
     ]
     with patch("forgeroom_backend.execution.gemini_cli.shutil.which", return_value=None):
         diff = await run_gemini_cli("Implement the approved auth foundation.", decisions, repo_path, enable_fallbacks=True)
+
+    print(f"\n[DEBUG] Generated Diff:\n{diff}\n[DEBUG] End of Diff")
+
     validate_diff(diff, repo_path)
     commit_hash, status = await apply_diff_and_commit(diff, "Apply generated diff", repo_path, push=False)
 
