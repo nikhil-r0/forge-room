@@ -18,57 +18,92 @@ except Exception:  # pragma: no cover - optional dependency
 
 class AIProvider:
     def __init__(self) -> None:
+        import logging
+        self.logger = logging.getLogger("orchestrator.provider")
         self.settings = get_settings()
         self._llm = None
+        
+        if not ChatGoogleGenerativeAI:
+            self.logger.error("❌ ChatGoogleGenerativeAI import failed. langchain-google-genai might be missing.")
+        
+        if not self.settings.gemini_api_key:
+            self.logger.warning("⚠️ FORGEROOM_GEMINI_API_KEY is missing. Falling back to local heuristics.")
+            
         if ChatGoogleGenerativeAI and self.settings.gemini_api_key:
-            self._llm = ChatGoogleGenerativeAI(
-                google_api_key=self.settings.gemini_api_key,
-                model=self.settings.gemini_model,
-                temperature=0,
-            )
+            try:
+                # Explicitly pass the key to avoid missing GOOGLE_API_KEY errors
+                self._llm = ChatGoogleGenerativeAI(
+                    api_key=self.settings.gemini_api_key,
+                    google_api_key=self.settings.gemini_api_key, # Alias for older versions
+                    model=self.settings.gemini_model,
+                    temperature=0,
+                )
+                self.logger.info(f"✅ AI Provider initialized with model: {self.settings.gemini_model}")
+            except Exception as e:
+                self.logger.error(f"❌ Failed to initialize Gemini LLM: {str(e)}")
 
     async def analyze_supervisor(self, chat_history: list[dict], existing_decisions: list[dict], current_goal: str) -> dict[str, Any]:
         if self._llm:
-            prompt = SUPERVISOR_PROMPT.format(
-                current_goal=current_goal,
-                existing_decisions=json.dumps(existing_decisions),
-                chat_history="\n".join(f"[{m['sender']}]: {m['message']}" for m in chat_history),
-            )
-            response = await self._llm.ainvoke(prompt)
-            return _parse_json_object(response.content)
+            try:
+                prompt = SUPERVISOR_PROMPT.format(
+                    current_goal=current_goal,
+                    existing_decisions=json.dumps(existing_decisions, default=str),
+                    chat_history="\n".join(f"[{m['sender']}]: {m['message']}" for m in chat_history),
+                )
+                response = await self._llm.ainvoke(prompt)
+                return _parse_json_object(response.content)
+            except Exception as e:
+                self.logger.error(f"LLM Supervisor Call failed: {str(e)}")
+
+        self.logger.warning("🔄 Switching to Heuristic Fallback for Supervisor")
         return fallback_supervisor(chat_history, existing_decisions, current_goal)
 
     async def detect_drift(self, proposed_decision: str, snapshot: str) -> dict[str, Any]:
         if self._llm:
-            prompt = DRIFT_DETECTION_PROMPT.format(proposed_decision=proposed_decision, codebase_snapshot=snapshot)
-            response = await self._llm.ainvoke(prompt)
-            return parse_drift_response(response.content, proposed_decision)
+            try:
+                prompt = DRIFT_DETECTION_PROMPT.format(proposed_decision=proposed_decision, codebase_snapshot=snapshot)
+                response = await self._llm.ainvoke(prompt)
+                return parse_drift_response(response.content, proposed_decision)
+            except Exception as e:
+                 self.logger.error(f"LLM Drift Call failed: {str(e)}")
+                 
+        self.logger.warning(f"🔄 Switching to Heuristic Fallback for Drift Detection ({proposed_decision[:20]}...)")
         return fallback_drift_detection(proposed_decision, snapshot)
 
     async def risk_autopsy(self, decisions: list[dict], conflicts_resolved: int, drift_alerts: int) -> str:
         if self._llm:
-            prompt = RISK_AUTOPSY_PROMPT.format(
-                decisions=json.dumps(decisions, default=str, indent=2),
-                conflicts_resolved=conflicts_resolved,
-                drift_alerts=drift_alerts,
-            )
-            response = await self._llm.ainvoke(prompt)
-            return response.content
+            try:
+                prompt = RISK_AUTOPSY_PROMPT.format(
+                    decisions=json.dumps(decisions, default=str, indent=2),
+                    conflicts_resolved=conflicts_resolved,
+                    drift_alerts=drift_alerts,
+                )
+                response = await self._llm.ainvoke(prompt)
+                return response.content
+            except Exception as e:
+                self.logger.error(f"LLM Risk Autopsy Call failed: {str(e)}")
+                
+        self.logger.warning("🔄 Switching to Heuristic Fallback for Risk Autopsy")
         return fallback_risk_autopsy(decisions, conflicts_resolved, drift_alerts)
 
     async def appsec_review(self, approved_decisions: list[dict], snapshot: str) -> AgentPayload:
         if self._llm:
-            prompt = APPSEC_AGENT_PROMPT.format(
-                approved_decisions=json.dumps(approved_decisions, default=str, indent=2),
-                codebase_snapshot=snapshot,
-            )
-            response = await self._llm.ainvoke(prompt)
-            return AgentPayload(
-                agent_name="AppSec",
-                agent_emoji="🛡",
-                response=response.content.strip(),
-                referenced_files=extract_files_from_snapshot(snapshot),
-            )
+            try:
+                prompt = APPSEC_AGENT_PROMPT.format(
+                    approved_decisions=json.dumps(approved_decisions, default=str, indent=2),
+                    codebase_snapshot=snapshot,
+                )
+                response = await self._llm.ainvoke(prompt)
+                return AgentPayload(
+                    agent_name="AppSec",
+                    agent_emoji="🛡",
+                    response=response.content.strip(),
+                    referenced_files=extract_files_from_snapshot(snapshot),
+                )
+            except Exception as e:
+                self.logger.error(f"LLM AppSec Review Call failed: {str(e)}")
+                
+        self.logger.warning("🔄 Switching to Heuristic Fallback for AppSec Review")
         return fallback_appsec_review(approved_decisions, snapshot)
 
 

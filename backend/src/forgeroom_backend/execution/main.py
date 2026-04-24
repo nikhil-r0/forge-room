@@ -9,6 +9,15 @@ from ..shared.settings import get_settings
 from .gemini_cli import run_gemini_cli
 
 
+import logging
+
+# Setup Execution Bridge logger
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - [%(levelname)s] - %(name)s - %(message)s"
+)
+logger = logging.getLogger("execution_bridge")
+
 settings = get_settings()
 app = FastAPI(title="ForgeRoom Execution Bridge")
 app.add_middleware(
@@ -18,11 +27,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 @app.on_event("startup")
 def startup() -> None:
     ensure_demo_repo(settings.target_repo)
-
+    logger.info(f"🚀 Execution Bridge Started | Repo: {settings.target_repo}")
 
 @app.post("/api/execute-spec", response_model=ExecuteSpecResponse)
 async def execute_spec(body: ExecuteSpecRequest) -> ExecuteSpecResponse:

@@ -12,9 +12,19 @@ class ForgeRoomGraph:
         self.provider = provider or AIProvider()
 
     async def run(self, db: Session, room_id: str) -> dict:
+        import logging
+        logger = logging.getLogger("orchestrator.graph")
+        
+        logger.info(f"  [NODE] -> Entering Supervisor Node")
         state = await supervisor_node(db, room_id, self.provider)
+        
         drift_alerts = []
-        for check in state.get("_pending_drift_checks", []):
+        pending_checks = state.get("_pending_drift_checks", [])
+        if pending_checks:
+            logger.info(f"  [NODE] -> supervisor found {len(pending_checks)} decisions requiring drift check")
+            
+        for check in pending_checks:
+            logger.info(f"  [NODE] -> Entering Drift Detection for: {check['proposed_decision'][:50]}...")
             drift = await run_drift_detection(
                 db=db,
                 room_id=room_id,
@@ -24,10 +34,17 @@ class ForgeRoomGraph:
                 provider=self.provider,
             )
             if drift.get("drift_detected"):
+                logger.warning(f"  ⚠️ DRIFT DETECTED in {drift.get('conflicting_file')}")
                 drift_alerts.append(drift)
+
         if drift_alerts:
-            state = state | repository_snapshot(db, room_id)
-            state["last_drift_alerts"] = repository_snapshot(db, room_id)["last_drift_alerts"]
+            # Refresh snapshot to get updated state including new drift alerts
+            snapshot = repository_snapshot(db, room_id)
+            # Merge: keep the supervisor's state but update blame graph and drift alerts
+            state["blame_graph_nodes"] = snapshot["blame_graph_nodes"]
+            state["blame_graph_edges"] = snapshot["blame_graph_edges"]
+            state["last_drift_alerts"] = snapshot["last_drift_alerts"]
+
         return state
 
 

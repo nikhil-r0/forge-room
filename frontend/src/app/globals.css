@@ -1,0 +1,161 @@
+@import "tailwindcss";
+
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  /* Vibrant theme colors mapped to Tailwind classes */
+  --color-primary: var(--primary);
+  --color-primary-container: var(--primary-container);
+  --color-on-primary-fixed: var(--on-primary);
+
+  --color-surface-dim: var(--surface-dim);
+  --color-surface-container-low: var(--surface-container-low);
+  --color-surface-container: var(--surface-container);
+  --color-surface-container-high: var(--surface-container-high);
+  --color-surface-container-highest: var(--surface-container-highest);
+  --color-surface-container-lowest: var(--surface-container-lowest);
+
+  --color-surface: var(--surface);
+  --color-on-surface: var(--on-surface);
+  --color-on-surface-variant: var(--on-surface-variant);
+
+  --color-outline-variant: var(--outline-variant);
+
+  --color-tertiary: var(--tertiary);
+  --color-tertiary-container: var(--tertiary-container);
+
+  --color-error: var(--error);
+
+  --font-sans: "Inter", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  /* Custom Animations from Spec */
+  --animate-shake: shake 0.4s cubic-bezier(.36, .07, .19, .97) both;
+  --animate-pulse-node: pulse-node 2s infinite ease-in-out;
+  --animate-glow-pulse: glow-pulse 2s infinite ease-in-out;
+
+  @keyframes shake {
+
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+
+    25% {
+      transform: translateX(-4px);
+    }
+
+    50% {
+      transform: translateX(4px);
+    }
+
+    75% {
+      transform: translateX(-2px);
+    }
+  }
+
+  @keyframes pulse-node {
+
+    0%,
+    100% {
+      transform: scale(1);
+    }
+
+    50% {
+      transform: scale(1.06);
+    }
+  }
+
+  @keyframes glow-pulse {
+
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0.4;
+    }
+  }
+}
+
+/* Light Theme (Vibrant, Colorful) */
+:root {
+  --background: #f8fafc;
+  --foreground: #0f172a;
+
+  /* Vibrant Purples for light mode primary */
+  --primary: #8b5cf6;
+  --primary-container: #a78bfa;
+  --on-primary: #ffffff;
+
+  /* Surfaces */
+  --surface: #ffffff;
+  --surface-dim: #f1f5f9;
+  --surface-container-lowest: #ffffff;
+  --surface-container-low: #f8fafc;
+  --surface-container: #f1f5f9;
+  --surface-container-high: #e2e8f0;
+  --surface-container-highest: #cbd5e1;
+
+  --on-surface: #0f172a;
+  --on-surface-variant: #475569;
+
+  --outline-variant: #cbd5e1;
+
+  /* Accent warning/conflict (Orange/Amber) */
+  --tertiary: #f59e0b;
+  --tertiary-container: #fbbf24;
+
+  /* Error/Drift (Red/Rose) */
+  --error: #e11d48;
+}
+
+/* Dark Theme (Vibrant Deep Colors) */
+.dark {
+  --background: #020617;
+  --foreground: #f8fafc;
+
+  /* Vibrant Cyan/Blue for dark mode */
+  --primary: #06b6d4;
+  --primary-container: #0ea5e9;
+  --on-primary: #0f172a;
+
+  /* Surfaces - very deep blues/slate rather than pure #131313 */
+  --surface: #0f172a;
+  --surface-dim: #020617;
+  --surface-container-lowest: #020617;
+  --surface-container-low: #0f172a;
+  --surface-container: #1e293b;
+  --surface-container-high: #334155;
+  --surface-container-highest: #475569;
+
+  --on-surface: #f8fafc;
+  --on-surface-variant: #94a3b8;
+
+  --outline-variant: #334155;
+
+  /* Amber/Yellow Accent */
+  --tertiary: #f59e0b;
+  --tertiary-container: #fbbf24;
+
+  /* Rose/Red Accent */
+  --error: #f43f5e;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}

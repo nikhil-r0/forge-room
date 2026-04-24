@@ -72,9 +72,6 @@ APPROVED DECISIONS:
 LIVING SPEC:
 {spec}
 
-CURRENT CODEBASE:
-{snapshot}
-
 TASK:
 Implement the approved decisions in the codebase.{task_ext}
 Provide a complete summary of the changes you made and the logic behind them.
