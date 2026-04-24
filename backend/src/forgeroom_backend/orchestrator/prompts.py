@@ -98,3 +98,17 @@ TASK: Review the approved decisions and codebase for security concerns. Provide:
 
 Be concise but thorough. Reference specific files and line numbers when possible.
 """
+
+SKILL_AGENT_PROMPT = """You are @{agent_name}, an expert with the following specialized skills:
+{skill_content}
+
+APPROVED DECISIONS:
+{approved_decisions}
+
+RELEVANT CODEBASE:
+{codebase_snapshot}
+
+TASK: Review the approved decisions and codebase using your specialized skills. Provide expert feedback, advice, or warnings based on the "Expert Guidance" provided in your skills section.
+
+Be concise but thorough. Focus specifically on your expertise.
+"""

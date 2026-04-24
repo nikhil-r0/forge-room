@@ -166,7 +166,7 @@ function ChatRoomContent() {
     sendMessage({ message: input, display_name: userName })
 
     // Check for agent invocations
-    const agentMatch = input.match(/@(\w+)/i)
+    const agentMatch = input.match(/@([\w-]+)/i)
     if (agentMatch) {
       const agentName = agentMatch[1]
       invokeAgent(roomId as string, agentName).catch(() =>

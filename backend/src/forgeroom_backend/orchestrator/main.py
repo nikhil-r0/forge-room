@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from ..shared import repository
 from ..shared.bootstrap import ensure_database, ensure_demo_repo
 from ..shared.contracts import (
     AgentRequest,
@@ -107,16 +108,47 @@ async def agent_endpoint(room_id: str, body: AgentRequest, db: Session = Depends
     logger.info(f"🤖 Invoking agent '{body.agent_name}' for Room: {room_id}")
     if get_room(db, room_id) is None:
         raise HTTPException(status_code=404, detail="Room not found")
-    if body.agent_name.lower() != "appsec":
-        raise HTTPException(status_code=400, detail="Unsupported agent")
     
-    try:
-        result = await run_appsec_review(db, room_id, graph.provider)
-        logger.info(f"✅ Agent '{body.agent_name}' response received.")
-        return result
-    except Exception as e:
-        logger.error(f"❌ Agent execution failed: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
+    # 1. Check for specialized 'appsec' agent
+    if body.agent_name.lower() == "appsec":
+        try:
+            result = await run_appsec_review(db, room_id, graph.provider)
+            logger.info(f"✅ Agent '{body.agent_name}' response received.")
+            return result
+        except Exception as e:
+            logger.error(f"❌ Agent execution failed: {str(e)}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Agent error: {str(e)}")
+
+    # 2. Check for dynamic skill-based agents
+    skills = repository.list_skills(db, room_id)
+    # Match exactly or by prefix (e.g., @React matching 'react-specialist')
+    matching_skill = next(
+        (s for s in skills if s.name.lower() == body.agent_name.lower() or s.name.lower().startswith(body.agent_name.lower())), 
+        None
+    )
+    
+    if matching_skill:
+        try:
+            decisions = repository.list_decisions(db, room_id)
+            # Use general snapshot for dynamic skills
+            from .utils import build_codebase_snapshot
+            snapshot = build_codebase_snapshot(get_settings().target_repo)
+            
+            result = await graph.provider.invoke_skill_agent(
+                agent_name=matching_skill.name,
+                skill_content=matching_skill.content,
+                approved_decisions=decisions,
+                snapshot=snapshot
+            )
+            
+            # Record the run
+            repository.add_agent_run(db, room_id, result)
+            return result
+        except Exception as e:
+            logger.error(f"❌ Skill Agent '{body.agent_name}' failed: {str(e)}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Skill Agent error: {str(e)}")
+
+    raise HTTPException(status_code=400, detail=f"Agent or Skill '{body.agent_name}' not found.")
 
 
 @app.post("/api/rooms/{room_id}/drift-check")
