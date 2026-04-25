@@ -146,7 +146,9 @@ export async function invokeAgent(
 export async function exportSession(
   roomId: string
 ): Promise<ExportResponse> {
-  return json(`${ORCHESTRATOR}/api/rooms/${roomId}/export`);
+  return json(`${ORCHESTRATOR}/api/rooms/${roomId}/export`, {
+    method: "POST",
+  });
 }
 
 // ─── Authentication (Orchestrator :8000) ───
