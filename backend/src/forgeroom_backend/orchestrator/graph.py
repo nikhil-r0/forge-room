@@ -11,12 +11,12 @@ class ForgeRoomGraph:
     def __init__(self, provider: AIProvider | None = None) -> None:
         self.provider = provider or AIProvider()
 
-    async def run(self, db: Session, room_id: str) -> dict:
+    async def run(self, db: Session, room_id: str, execution_summary: str | None = None) -> dict:
         import logging
         logger = logging.getLogger("orchestrator.graph")
         
         logger.info(f"  [NODE] -> Entering Supervisor Node")
-        state = await supervisor_node(db, room_id, self.provider)
+        state = await supervisor_node(db, room_id, self.provider, execution_summary=execution_summary)
         
         drift_alerts = []
         pending_checks = state.get("_pending_drift_checks", [])

@@ -1,8 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { AlertCircle } from "lucide-react"
-import { castVote } from "@/lib/api"
+import { AlertCircle, Gavel } from "lucide-react"
+import { castVote, resolveConflict } from "@/lib/api"
 import { useRoomStore } from "@/lib/useRoomStore"
 import type { ConflictPayload, VoteChoice } from "@/lib/types"
 import { toast } from "sonner"
@@ -27,6 +27,19 @@ export function ConflictCard({ conflict }: ConflictCardProps) {
       await castVote(roomId, conflict.conflict_id, currentUser.user_id, option)
     } catch (err) {
       toast.error("Vote failed", { description: String(err) })
+    } finally {
+      setVoting(false)
+    }
+  }
+
+  const handleResolve = async (option: "a" | "b") => {
+    if (!currentUser || currentUser.role !== "manager" || !roomId || voting) return
+    setVoting(true)
+    try {
+      await resolveConflict(roomId, conflict.conflict_id, option)
+      toast.success(`Conflict Override Applied`, { description: `Option ${option.toUpperCase()} finalized.`})
+    } catch (err) {
+      toast.error("Override failed", { description: String(err) })
     } finally {
       setVoting(false)
     }
@@ -98,12 +111,34 @@ export function ConflictCard({ conflict }: ConflictCardProps) {
         </button>
       </div>
 
-      <div className="bg-tertiary-container/5 py-3 text-center border-t border-tertiary-container/10 relative z-10">
+      <div className="bg-tertiary-container/5 py-3 px-4 border-t border-tertiary-container/10 relative z-10 flex items-center justify-between">
         <p className="text-[10px] text-tertiary-container/70 font-medium uppercase tracking-widest">
           {conflict.resolved
             ? `Resolved — ${totalVoters} vote${totalVoters !== 1 ? "s" : ""} cast`
             : `${totalVoters} vote${totalVoters !== 1 ? "s" : ""} cast`}
         </p>
+
+        {/* Manager Override Controls */}
+        {!conflict.resolved && (
+          <div className="flex items-center gap-2">
+            <button
+              disabled={currentUser?.role !== "manager" || voting}
+              onClick={() => handleResolve("a")}
+              className="px-3 py-1 flex items-center gap-1.5 rounded-sm bg-tertiary-container/10 border border-tertiary-container/30 hover:border-tertiary-container/80 text-[10px] font-bold uppercase tracking-widest text-tertiary-container transition-colors disabled:opacity-40"
+              title={currentUser?.role !== "manager" ? "Manager Access Required" : "Force Option A"}
+            >
+              <Gavel className="w-3 h-3" /> A
+            </button>
+            <button
+              disabled={currentUser?.role !== "manager" || voting}
+              onClick={() => handleResolve("b")}
+              className="px-3 py-1 flex items-center gap-1.5 rounded-sm bg-tertiary-container/10 border border-tertiary-container/30 hover:border-tertiary-container/80 text-[10px] font-bold uppercase tracking-widest text-tertiary-container transition-colors disabled:opacity-40"
+              title={currentUser?.role !== "manager" ? "Manager Access Required" : "Force Option B"}
+            >
+              <Gavel className="w-3 h-3" /> B
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

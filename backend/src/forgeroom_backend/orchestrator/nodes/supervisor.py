@@ -6,22 +6,29 @@ from ...shared import repository
 from ..providers import AIProvider
 
 
-async def supervisor_node(db: Session, room_id: str, provider: AIProvider) -> dict:
+async def supervisor_node(db: Session, room_id: str, provider: AIProvider, execution_summary: str | None = None) -> dict:
     import logging
     logger = logging.getLogger("orchestrator.node.supervisor")
     
     room = repository.get_room(db, room_id)
-    chat_history = repository.serialize_recent_chat(db, room_id)
+    chat_history = repository.serialize_recent_chat(db, room_id, ai_only=True)
     existing_decisions = repository.list_decisions(db, room_id)
     active_skills = repository.list_skills(db, room_id)
+    conflicts = repository.list_conflicts(db, room_id)
+    resolved_conflicts = [c.model_dump(mode="json") for c in conflicts if c.resolved]
     
     logger.debug(f"Analyzing room {room_id}. Goal: {room.current_goal}. Msg count: {len(chat_history)}. Skills: {len(active_skills)}")
-    
+    if execution_summary:
+        logger.info(f"📊 Processing supervisor with execution summary ({len(execution_summary)} chars)")
+
     result = await provider.analyze_supervisor(
-        chat_history, 
-        existing_decisions, 
-        room.current_goal,
-        active_skills=[s.model_dump(mode="json") for s in active_skills]
+        chat_history=chat_history, 
+        existing_decisions=existing_decisions, 
+        current_goal=room.current_goal,
+        active_skills=[s.model_dump(mode="json") for s in active_skills],
+        pending_tasks=room.pending_tasks or [],
+        resolved_conflicts=resolved_conflicts,
+        execution_summary=execution_summary
     )
     
     logger.debug(f"Supervisor Reasoning Result: {result}")
@@ -58,14 +65,22 @@ async def supervisor_node(db: Session, room_id: str, provider: AIProvider) -> di
     conflict_payload = None
     if result.get("conflict_detected") and result.get("conflict"):
         conflict = result["conflict"]
-        conflict_payload = repository.add_conflict(
-            db,
-            room_id,
-            summary=conflict["summary"],
-            option_a=conflict["option_a"],
-            option_b=conflict["option_b"],
-            context=conflict["context"],
+        
+        # Prevent redetecting resolved ones (extra safety check in code)
+        is_already_resolved = any(
+            conflict["summary"].lower() in rc["summary"].lower() 
+            for rc in resolved_conflicts
         )
+        
+        if not is_already_resolved:
+            conflict_payload = repository.add_conflict(
+                db,
+                room_id,
+                summary=conflict["summary"],
+                option_a=conflict["option_a"],
+                option_b=conflict["option_b"],
+                context=conflict["context"],
+            )
 
     snapshot = repository.snapshot_room(db, room_id, new_decision_ids=set(new_decision_ids))
     state = snapshot.model_dump(mode="json")

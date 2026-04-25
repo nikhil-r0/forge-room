@@ -18,6 +18,7 @@ class User(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     username: Mapped[str] = mapped_column(String, unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String)  # In a real app we'd salt/hash properly
+    role: Mapped[str] = mapped_column(String, default="member")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
 
 
@@ -26,10 +27,20 @@ class Room(Base):
 
     id: Mapped[str] = mapped_column(String(16), primary_key=True)
     current_goal: Mapped[str] = mapped_column(Text, default="No goal set yet")
+    creator_id: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True)
     focus_mode: Mapped[bool] = mapped_column(Boolean, default=False)
     pending_tasks: Mapped[list[str]] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(String(32), default="active")
+    target_repo: Mapped[str | None] = mapped_column(String, nullable=True)
     session_start: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+
+    participants: Mapped[list[User]] = relationship("User", secondary="user_rooms")
+
+class UserRoom(Base):
+    __tablename__ = "user_rooms"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    room_id: Mapped[str] = mapped_column(ForeignKey("rooms.id"), primary_key=True)
+    joined_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
 
 
 class ChatMessage(Base):
@@ -39,6 +50,7 @@ class ChatMessage(Base):
     room_id: Mapped[str] = mapped_column(ForeignKey("rooms.id"), index=True)
     sender_id: Mapped[str] = mapped_column(String(128))
     message: Mapped[str] = mapped_column(Text)
+    is_ai_focused: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, index=True)
 
 

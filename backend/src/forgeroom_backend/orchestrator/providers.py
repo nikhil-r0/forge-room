@@ -48,7 +48,16 @@ class AIProvider:
             except Exception as e:
                 self.logger.error(f"❌ Failed to initialize Gemini LLM: {str(e)}")
 
-    async def analyze_supervisor(self, chat_history: list[dict], existing_decisions: list[dict], current_goal: str, active_skills: list[dict] | None = None) -> dict[str, Any]:
+    async def analyze_supervisor(
+        self, 
+        chat_history: list[dict], 
+        existing_decisions: list[dict], 
+        current_goal: str, 
+        active_skills: list[dict] | None = None,
+        pending_tasks: list[str] | None = None,
+        resolved_conflicts: list[dict] | None = None,
+        execution_summary: str | None = None
+    ) -> dict[str, Any]:
         if self._llm:
             try:
                 skills_text = ""
@@ -58,8 +67,11 @@ class AIProvider:
                 prompt = SUPERVISOR_PROMPT.format(
                     current_goal=current_goal,
                     existing_decisions=json.dumps(existing_decisions, default=str),
+                    pending_tasks=json.dumps(pending_tasks or [], default=str),
+                    resolved_conflicts=json.dumps(resolved_conflicts or [], default=str),
                     chat_history="\n".join(f"[{m['sender']}]: {m['message']}" for m in chat_history),
                     active_skills=skills_text,
+                    execution_summary=execution_summary or "None",
                 )
                 response = await self._llm.ainvoke(prompt)
                 return _parse_json_object(response.content)

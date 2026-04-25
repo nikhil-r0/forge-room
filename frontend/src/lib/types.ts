@@ -40,6 +40,7 @@ export interface ConflictPayload {
 export interface User {
   user_id: string;
   username: string;
+  role: string;
 }
 
 export interface BlameNode {
@@ -86,6 +87,8 @@ export interface SpecPayload {
   approved_decisions: DecisionPayload[];
   pending_tasks: string[];
   open_conflicts: number;
+  active_skills?: SkillPayload[];
+  focus_mode?: boolean;
 }
 
 export interface SkillPayload {
@@ -98,6 +101,7 @@ export interface SkillPayload {
 
 export interface RoomSnapshot {
   room_id: string;
+  creator_id?: string;
   current_goal: string;
   focus_mode: boolean;
   pending_tasks: string[];
@@ -108,6 +112,7 @@ export interface RoomSnapshot {
   last_drift_alerts: DriftAlertPayload[];
   active_skills: SkillPayload[];
   messages: { sender: string; message: string; timestamp: string }[];
+  participants: User[];
   session_start: string;
 }
 
@@ -134,4 +139,14 @@ export interface UIMessage {
   content: string;
   timestamp: Date;
   payload?: Record<string, unknown>;
+}
+
+export interface SignupRequest {
+  username: string;
+  password?: string;
+}
+
+export interface LoginRequest {
+  username: string;
+  password?: string;
 }

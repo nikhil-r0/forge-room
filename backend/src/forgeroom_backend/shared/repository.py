@@ -22,8 +22,8 @@ from .contracts import (
 from .models import AgentRun, ChatMessage, Conflict, Decision, DecisionRelation, DriftAlert, ExportRecord, Room, Skill, Vote
 
 
-def create_room(db: Session, current_goal: str, focus_mode: bool) -> Room:
-    room = Room(id=str(uuid.uuid4())[:8], current_goal=current_goal, focus_mode=focus_mode)
+def create_room(db: Session, current_goal: str, focus_mode: bool, creator_id: str | None = None) -> Room:
+    room = Room(id=str(uuid.uuid4())[:8], current_goal=current_goal, focus_mode=focus_mode, creator_id=creator_id)
     db.add(room)
     db.commit()
     db.refresh(room)
@@ -34,7 +34,7 @@ def get_room(db: Session, room_id: str) -> Room | None:
     return db.get(Room, room_id)
 
 
-def store_chat_messages(db: Session, room_id: str, messages: list[dict]) -> None:
+def store_chat_messages(db: Session, room_id: str, messages: list[dict], is_ai_focused: bool = False) -> None:
     for message in messages:
         created_at = message["timestamp"]
         if isinstance(created_at, str):
@@ -44,6 +44,7 @@ def store_chat_messages(db: Session, room_id: str, messages: list[dict]) -> None
                 room_id=room_id,
                 sender_id=message["sender"],
                 message=message["message"],
+                is_ai_focused=is_ai_focused,
                 created_at=created_at,
             )
         )
@@ -334,8 +335,10 @@ def snapshot_room(db: Session, room_id: str, new_decision_ids: set[str] | None =
         )
         for decision in decisions
     ]
+    from .contracts import User as UserContract
     return RoomSnapshot(
         room_id=room.id,
+        creator_id=room.creator_id,
         current_goal=room.current_goal,
         focus_mode=room.focus_mode,
         pending_tasks=current_pending_tasks(db, room_id),
@@ -347,19 +350,24 @@ def snapshot_room(db: Session, room_id: str, new_decision_ids: set[str] | None =
         active_skills=list_skills(db, room_id),
         messages=[
             ChatMessageIn(sender=msg["sender"], message=msg["message"], timestamp=datetime.fromisoformat(msg["timestamp"]))
-            for msg in serialize_recent_chat(db, room_id)
+            for msg in serialize_recent_chat(db, room_id, ai_only=False)
+        ],
+        participants=[
+            UserContract(user_id=u.id, username=u.username, role=u.role)
+            for u in room.participants
         ],
         session_start=room.session_start,
     )
 
 
-def serialize_recent_chat(db: Session, room_id: str, limit: int = 40) -> list[dict]:
+def serialize_recent_chat(db: Session, room_id: str, limit: int = 40, ai_only: bool = False) -> list[dict]:
     # Fetch human messages
+    stmt = select(ChatMessage).where(ChatMessage.room_id == room_id)
+    if ai_only:
+        stmt = stmt.where(ChatMessage.is_ai_focused == True)
+        
     chats = db.scalars(
-        select(ChatMessage)
-        .where(ChatMessage.room_id == room_id)
-        .order_by(ChatMessage.created_at.desc())
-        .limit(limit)
+        stmt.order_by(ChatMessage.created_at.desc()).limit(limit)
     ).all()
     
     # Fetch agent responses

@@ -22,7 +22,7 @@ logger = logging.getLogger("execution_bridge")
 async def run_gemini_cli(
     spec: str,
     decisions: list[dict],
-    repo_path: Path,
+    repo_path: str | Path,
     active_skills: list[dict] | None = None,
     enable_fallbacks: bool = True,
     commit_message: str | None = None,
@@ -84,6 +84,11 @@ async def run_gemini_cli(
     try:
         data = json.loads(result.stdout)
         summary = data.get("response", "No response returned from Gemini.")
+        
+        if active_skills:
+            skill_names = ", ".join(f"@{s['name']}" for s in active_skills)
+            summary += f"\n\n---\n🛠️ **Skills Engaged:** {skill_names}"
+            
         logger.info("✅ Gemini CLI execution successful")
         return summary
     except json.JSONDecodeError:
@@ -97,7 +102,7 @@ async def run_gemini_cli(
 def _build_prompt(
     spec: str,
     decisions: list[dict],
-    repo_path: Path,
+    repo_path: str | Path,
     active_skills: list[dict] | None = None,
     commit_message: str | None = None,
     push: bool = False,
@@ -133,7 +138,8 @@ After modifying the files, provide a complete summary of the changes you made an
 """
 
 
-def _read_codebase(repo_path: Path) -> str:
+def _read_codebase(repo_path: str | Path) -> str:
+    repo_path = Path(repo_path)
     ignore_dirs = {".git", "node_modules", "__pycache__", ".next", ".venv", "venv"}
     suffixes = {".py", ".js", ".ts", ".tsx", ".jsx", ".json", ".md", ".yaml", ".yml"}
     content = []

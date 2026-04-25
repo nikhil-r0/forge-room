@@ -30,12 +30,23 @@ logger = logging.getLogger("websocket_gateway")
 settings = get_settings()
 manager = ConnectionManager()
 app = FastAPI(title="ForgeRoom WebSocket Gateway")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+if "*" in settings.cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=".*",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
 
 @app.on_event("startup")
 def startup() -> None:
@@ -115,8 +126,12 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, user_id: str, d
             if not message["timestamp"]:
                 message["timestamp"] = datetime.now(UTC).isoformat()
             
-            logger.debug(f"💬 Msg from {user_id} in {room_id}: {message['message'][:50]}...")
-            store_chat_messages(db, room_id, [message])
+            # Fetch room status to see if AI is focused
+            room = get_room(db, room_id)
+            is_focused = room.focus_mode if room else False
+
+            logger.debug(f"💬 Msg from {user_id} in {room_id} | AI Focused: {is_focused}")
+            store_chat_messages(db, room_id, [message], is_ai_focused=is_focused)
             await manager.broadcast(
                 room_id,
                 make_message(
@@ -126,7 +141,9 @@ async def websocket_endpoint(websocket: WebSocket, room_id: str, user_id: str, d
                     {"message": message["message"], "display_name": display_name},
                 ),
             )
-            await debounce.add_message(room_id, message)
+            
+            if is_focused:
+                await debounce.add_message(room_id, message)
     except WebSocketDisconnect:
         logger.info(f"🚪 Client disconnected: {user_id} in Room {room_id}")
         manager.disconnect(websocket, room_id)

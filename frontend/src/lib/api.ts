@@ -27,6 +27,7 @@ const WS_GATEWAY = process.env.NEXT_PUBLIC_WS_GATEWAY_URL ?? getBaseUrl(8002);
 async function json<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     ...init,
   });
   if (!res.ok) {
@@ -69,6 +70,20 @@ export async function addSkill(
   });
 }
 
+export async function updateRoomSettings(
+  roomId: string,
+  targetRepo?: string,
+  focusMode?: boolean
+): Promise<{ status: string }> {
+  return json(`${ORCHESTRATOR}/api/rooms/${roomId}/settings`, {
+    method: "POST",
+    body: JSON.stringify({ 
+      target_repo: targetRepo,
+      focus_mode: focusMode 
+    }),
+  });
+}
+
 // ─── Voting (WS Gateway :8002) ───
 
 export async function castVote(
@@ -87,16 +102,18 @@ export async function castVote(
 
 export async function executeSpec(
   roomId: string,
+  executorId: string,
   specMarkdown: string,
   approvedDecisions: DecisionPayload[],
   activeSkills: SkillPayload[] = [],
   commitMessage?: string,
   push = false
-): Promise<{ summary: string; status: string }> {
+): Promise<{ summary: string; status: string; snapshot?: any }> {
   return json(`${EXECUTION}/api/execute-spec`, {
     method: "POST",
     body: JSON.stringify({
       room_id: roomId,
+      executor_id: executorId,
       spec_markdown: specMarkdown,
       approved_decisions: approvedDecisions,
       active_skills: activeSkills,
@@ -150,4 +167,38 @@ export async function login(username: string, password: string): Promise<User> {
 
 export async function getMe(): Promise<User> {
   return json(`${ORCHESTRATOR}/api/auth/me`);
+}
+
+export async function logout(): Promise<{ status: string }> {
+  return json(`${ORCHESTRATOR}/api/auth/logout`, { method: "POST" });
+}
+
+export async function getMyRooms(): Promise<{ room_id: string; current_goal: string; status: string }[]> {
+  return json(`${ORCHESTRATOR}/api/users/me/rooms`);
+}
+
+export async function joinRoom(roomId: string): Promise<{ status: string }> {
+  return json(`${ORCHESTRATOR}/api/rooms/${roomId}/join`, { method: "POST" });
+}
+
+export async function resolveConflict(
+  roomId: string,
+  conflictId: string,
+  winner: "a" | "b"
+): Promise<{ status: string; decision_id: string }> {
+  return json(`${ORCHESTRATOR}/api/rooms/${roomId}/conflicts/${conflictId}/resolve`, {
+    method: "POST",
+    body: JSON.stringify({ winner }),
+  });
+}
+
+export async function getUsers(): Promise<User[]> {
+  return json(`${ORCHESTRATOR}/api/users`);
+}
+
+export async function updateUserRole(userId: string, role: "manager" | "member"): Promise<{ status: string }> {
+  return json(`${ORCHESTRATOR}/api/users/${userId}/role`, {
+    method: "POST",
+    body: JSON.stringify({ role }),
+  });
 }

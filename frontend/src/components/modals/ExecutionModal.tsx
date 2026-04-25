@@ -35,6 +35,7 @@ export function ExecutionModal({
   onSuccess 
 }: ExecutionModalProps) {
   const roomId = useRoomStore((s) => s.roomId)
+  const currentUser = useRoomStore((s) => s.currentUser)
   const [status, setStatus] = useState<ExecutionStatus>("idle")
   const [commitMessage, setCommitMessage] = useState("Implement approved architecture specification")
   const [push, setPush] = useState(false)
@@ -47,7 +48,8 @@ export function ExecutionModal({
     }
     setStatus("running")
     try {
-      const result = await executeSpec(roomId, specMarkdown, approvedDecisions, activeSkills, commitMessage, push)
+      const execId = currentUser?.user_id || "unknown"
+      const result = await executeSpec(roomId, execId, specMarkdown, approvedDecisions, activeSkills, commitMessage, push)
       setSummary(result.summary)
       if (result.snapshot) {
         useRoomStore.getState().hydrateFromSnapshot(result.snapshot)

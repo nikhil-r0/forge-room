@@ -51,12 +51,23 @@ if settings.debug_mode:
 graph = ForgeRoomGraph()
 app = FastAPI(title="ForgeRoom Orchestrator")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+if "*" in settings.cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=".*",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
 
 
 @app.on_event("startup")
@@ -66,10 +77,23 @@ def startup() -> None:
 
 
 @app.post("/api/rooms", response_model=CreateRoomResponse)
-async def create_room_endpoint(body: CreateRoomRequest, db: Session = Depends(get_db)) -> CreateRoomResponse:
+async def create_room_endpoint(body: CreateRoomRequest, user_id: str | None = Cookie(None), db: Session = Depends(get_db)) -> CreateRoomResponse:
     logger.info(f"🆕 Creating new room with goal: {body.current_goal[:50]}...")
     try:
-        room = create_room(db, body.current_goal, body.focus_mode)
+        room = create_room(db, body.current_goal, body.focus_mode, creator_id=user_id)
+        
+        # Link user if logged in and ensure they are a manager
+        if user_id:
+            from ..shared.models import UserRoom, User
+            # Ensure creator is a manager
+            user = db.get(User, user_id)
+            if user and user.role != "manager":
+                user.role = "manager"
+            
+            ur = UserRoom(user_id=user_id, room_id=room.id)
+            db.add(ur)
+            db.commit()
+
         logger.info(f"✅ Room created: {room.id}")
         return CreateRoomResponse(room_id=room.id)
     except Exception as e:
@@ -85,6 +109,56 @@ async def get_room_endpoint(room_id: str, db: Session = Depends(get_db)) -> Room
         logger.warning(f"🚫 Room not found: {room_id}")
         raise HTTPException(status_code=404, detail="Room not found")
     return snapshot_room(db, room_id)
+
+class UpdateRoomSettingsRequest(BaseModel):
+    target_repo: str | None = None
+    focus_mode: bool | None = None
+
+@app.post("/api/rooms/{room_id}/settings")
+async def update_room_settings(room_id: str, body: UpdateRoomSettingsRequest, db: Session = Depends(get_db)):
+    room = get_room(db, room_id)
+    if room is None:
+        raise HTTPException(status_code=404, detail="Room not found")
+    
+    if body.target_repo is not None:
+        logger.info(f"🔧 Updating target repo for info: {room_id} -> {body.target_repo}")
+        room.target_repo = body.target_repo
+        
+    if body.focus_mode is not None:
+        logger.info(f"⚡ Toggling Focus Mode for {room_id}: {body.focus_mode}")
+        room.focus_mode = body.focus_mode
+        
+    db.commit()
+    
+    # Broadcast spec update to sync focus mode in UI
+    from ..websocket_gateway.publisher import make_message
+    from ..shared.contracts import MessageType
+    import httpx
+
+    snapshot = snapshot_room(db, room_id)
+    try:
+        async with httpx.AsyncClient(timeout=None) as client:
+            await client.post(
+                f"{settings.websocket_url.replace('ws://', 'http://')}/api/rooms/{room_id}/broadcast",
+
+                json=make_message(
+                    MessageType.SPEC_UPDATE,
+                    room_id,
+                    "system:orchestrator",
+                    {
+                        "current_goal": snapshot.current_goal,
+                        "approved_decisions": [d.model_dump(mode="json") for d in snapshot.approved_decisions],
+                        "pending_tasks": snapshot.pending_tasks,
+                        "open_conflicts": len(snapshot.pending_conflicts),
+                        "active_skills": [s.model_dump(mode="json") for s in snapshot.active_skills],
+                        "focus_mode": snapshot.focus_mode
+                    }
+                )
+            )
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to broadcast focus mode update: {e}")
+
+    return {"status": "success"}
 
 
 @app.post("/api/process-batch")
@@ -233,16 +307,19 @@ async def export_session(room_id: str, db: Session = Depends(get_db)) -> ExportR
 @app.post("/api/auth/signup")
 async def signup(body: SignupRequest, db: Session = Depends(get_db)):
     from ..shared.models import User
-    from sqlalchemy import select
+    from sqlalchemy import select, func
     
     existing = db.scalar(select(User).where(User.username == body.username))
     if existing:
         raise HTTPException(status_code=400, detail="Username already taken")
     
-    user = User(id=str(uuid.uuid4()), username=body.username, password_hash=body.password)  # Dummy hashing
+    user_count = db.scalar(select(func.count()).select_from(User))
+    role = "manager" if user_count == 0 else "member"
+    
+    user = User(id=str(uuid.uuid4()), username=body.username, password_hash=body.password, role=role)
     db.add(user)
     db.commit()
-    return {"status": "success", "user_id": user.id}
+    return {"status": "success", "user_id": user.id, "role": role}
 
 
 @app.post("/api/auth/login")
@@ -256,14 +333,18 @@ async def login(body: LoginRequest, response: Response, db: Session = Depends(ge
     
     response.set_cookie(key="user_id", value=user.id, httponly=True, samesite="lax")
     response.set_cookie(key="username", value=user.username, samesite="lax")
-    return {"status": "success", "username": user.username, "user_id": user.id}
+    return {"status": "success", "username": user.username, "user_id": user.id, "role": user.role}
 
 
 @app.get("/api/auth/me")
-async def get_me(user_id: str | None = Cookie(None), username: str | None = Cookie(None)):
+async def get_me(user_id: str | None = Cookie(None), db: Session = Depends(get_db)):
     if not user_id:
         raise HTTPException(status_code=401, detail="Not logged in")
-    return {"user_id": user_id, "username": username}
+    from ..shared.models import User
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    return {"user_id": user.id, "username": user.username, "role": user.role}
 
 
 @app.post("/api/auth/logout")
@@ -271,7 +352,170 @@ async def logout(response: Response):
     response.delete_cookie("user_id")
     response.delete_cookie("username")
     return {"status": "success"}
+@app.get("/api/users/me/rooms")
+async def get_my_rooms(user_id: str | None = Cookie(None), db: Session = Depends(get_db)):
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    from sqlalchemy import select
+    from ..shared.models import UserRoom, Room
+    
+    # We join Room to get the name/goal
+    stmt = select(Room).join(UserRoom, UserRoom.room_id == Room.id).where(UserRoom.user_id == user_id).order_by(UserRoom.joined_at.desc())
+    rooms = db.scalars(stmt).all()
+    
+    return [
+        {
+            "room_id": r.id, 
+            "current_goal": r.current_goal, 
+            "status": r.status,
+            "participants": [{"username": p.username, "role": p.role} for p in r.participants]
+        } 
+        for r in rooms
+    ]
 
+@app.get("/api/users")
+async def get_all_users(user_id: str | None = Cookie(None), db: Session = Depends(get_db)):
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    from sqlalchemy import select
+    from ..shared.models import User
+    
+    current_user = db.get(User, user_id)
+    if not current_user or current_user.role != "manager":
+        raise HTTPException(status_code=403, detail="Manager access required")
+        
+    users = db.scalars(select(User)).all()
+    return [{"user_id": u.id, "username": u.username, "role": u.role} for u in users]
+
+class RoleUpdateRequest(BaseModel):
+    role: str
+
+@app.post("/api/users/{target_id}/role")
+async def update_user_role(target_id: str, body: RoleUpdateRequest, user_id: str | None = Cookie(None), db: Session = Depends(get_db)):
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    
+    from ..shared.models import User
+    current_user = db.get(User, user_id)
+    
+    if not current_user or current_user.role != "manager":
+        raise HTTPException(status_code=403, detail="Manager access required")
+        
+    if body.role not in ("manager", "member"):
+        raise HTTPException(status_code=400, detail="Invalid role specification")
+        
+    if target_id == user_id and body.role != "manager":
+        raise HTTPException(status_code=400, detail="Cannot self-demote from manager role")
+        
+    target_user = db.get(User, target_id)
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Target user not found")
+        
+    target_user.role = body.role
+    db.commit()
+    
+    return {"status": "success", "user_id": target_id, "role": target_user.role}
+@app.post("/api/rooms/{room_id}/join")
+async def join_room(room_id: str, user_id: str | None = Cookie(None), db: Session = Depends(get_db)):
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    
+    from sqlalchemy import select
+    from ..shared.models import UserRoom, Room
+    
+    room = db.get(Room, room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+        
+    existing = db.scalar(select(UserRoom).where(UserRoom.user_id == user_id, UserRoom.room_id == room_id))
+    if not existing:
+        ur = UserRoom(user_id=user_id, room_id=room_id)
+        db.add(ur)
+        db.commit()
+        
+        # Broadcast membership update
+        try:
+            import httpx
+            snapshot = snapshot_room(db, room_id)
+            async with httpx.AsyncClient() as client:
+                await client.post(
+                    f"{settings.websocket_url.replace('ws://', 'http://')}/api/rooms/{room_id}/broadcast",
+                    json={
+                        "type": "spec_update",
+                        "room_id": room_id,
+                        "sender_id": "system",
+                        "timestamp": datetime.now(UTC).isoformat(),
+                        "payload": snapshot.model_dump(mode="json")
+                    }
+                )
+        except Exception as e:
+            logger.error(f"Failed to broadcast join: {e}")
+        
+    return {"status": "success", "room_id": room_id}
+
+
+class ResolveConflictRequest(BaseModel):
+    winner: str  # "a" or "b"
+
+@app.post("/api/rooms/{room_id}/conflicts/{conflict_id}/resolve")
+async def resolve_conflict(room_id: str, conflict_id: str, body: ResolveConflictRequest, user_id: str | None = Cookie(None), db: Session = Depends(get_db)):
+    from ..shared.models import User, Conflict, Decision
+    import uuid
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not logged in")
+    user = db.get(User, user_id)
+    if not user or user.role != "manager":
+        raise HTTPException(status_code=403, detail="Manager access required")
+        
+    conflict = db.get(Conflict, conflict_id)
+    if not conflict or conflict.room_id != room_id:
+        raise HTTPException(status_code=404, detail="Conflict not found")
+        
+    if body.winner not in ("a", "b"):
+        raise HTTPException(status_code=400, detail="Winner must be 'a' or 'b'")
+        
+    conflict.resolved = True
+    conflict.winner = body.winner
+    
+    # Text of the winner
+    winning_text = conflict.option_a if body.winner == "a" else conflict.option_b
+    
+    # Forge a new decision
+    decision = Decision(
+        id=str(uuid.uuid4()),
+        room_id=room_id,
+        description=f"[{conflict.summary} RESOLVED]: {winning_text}",
+        category="architecture"
+    )
+    db.add(decision)
+    db.commit()
+    
+    # Broadcast Spec Update
+    snapshot = snapshot_room(db, room_id)
+    from ..websocket_gateway.publisher import make_message
+    from ..shared.contracts import MessageType
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=None) as client:
+            await client.post(
+                f"{settings.websocket_url}/api/rooms/{room_id}/broadcast",
+                json=make_message(
+                    MessageType.SPEC_UPDATE,
+                    room_id,
+                    "system:orchestrator",
+                    {
+                        "current_goal": snapshot.current_goal,
+                        "approved_decisions": [d.model_dump(mode="json") for d in snapshot.approved_decisions],
+                        "pending_tasks": snapshot.pending_tasks,
+                        "open_conflicts": len(snapshot.pending_conflicts),
+                        "active_skills": [s.model_dump(mode="json") for s in snapshot.active_skills],
+                    }
+                )
+            )
+    except Exception as e:
+        logger.warning(f"⚠️ Failed to broadcast spec update after conflict resolution: {e}")
+
+    return {"status": "success", "decision_id": decision.id}
 
 class ExecuteSyncRequest(BaseModel):
     summary: str
@@ -312,7 +556,7 @@ async def sync_execution(room_id: str, body: ExecuteSyncRequest, db: Session = D
 
     # 3. Process with Graph to update specimen
     logger.info(f"🔄 Syncing execution summary into specimens for Room: {room_id}")
-    result = await graph.run(db, room_id)
+    result = await graph.run(db, room_id, execution_summary=summary)
     
     resolved = result.get("completed_tasks", [])
     if resolved:

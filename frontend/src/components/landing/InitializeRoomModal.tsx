@@ -13,7 +13,7 @@ import {
     DialogDescription,
     DialogTrigger,
 } from "@/components/ui/dialog"
-import { createRoom } from "@/lib/api"
+import { createRoom, getMe } from "@/lib/api"
 import { useRoomStore } from "@/lib/useRoomStore"
 import { toast } from "sonner"
 
@@ -31,6 +31,14 @@ export function InitializeRoomModal() {
         setLoading(true)
         try {
             const { room_id } = await createRoom(goal.trim() || "No goal set yet")
+            // Refresh user to pick up new 'manager' role from server
+            try {
+                const me = await getMe()
+                useRoomStore.getState().setCurrentUser(me)
+            } catch (authErr) {
+                console.warn("User refresh failed after room creation", authErr)
+            }
+
             setRoom(room_id, name.trim())
             router.push(`/room/${room_id}?name=${encodeURIComponent(name.trim())}`)
         } catch (err) {

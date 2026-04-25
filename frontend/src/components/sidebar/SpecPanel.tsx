@@ -13,6 +13,7 @@ interface SpecPanelProps {
   openConflicts: number
   isLocked: boolean
   isGenerating: boolean
+  userRole: string
   onGenerateCode: () => void
 }
 
@@ -43,6 +44,7 @@ export function SpecPanel({
   openConflicts,
   isLocked,
   isGenerating,
+  userRole,
   onGenerateCode,
 }: SpecPanelProps) {
   return (
@@ -193,11 +195,11 @@ export function SpecPanel({
         <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
         <button
           className={`w-full relative overflow-hidden group py-4 rounded-sm transition-all duration-300 font-bold uppercase tracking-widest text-label-sm flex items-center justify-center gap-3 ${
-            isLocked || isGenerating
+            isLocked || isGenerating || userRole !== 'manager'
               ? "bg-surface-container-highest text-outline-variant cursor-not-allowed border border-outline-variant/30"
               : "bg-surface-container-lowest text-primary hover:bg-primary/10 border border-primary/20"
           }`}
-          disabled={isLocked || isGenerating}
+          disabled={isLocked || isGenerating || userRole !== 'manager'}
           onClick={onGenerateCode}
         >
           {!isLocked && !isGenerating && (
@@ -212,10 +214,15 @@ export function SpecPanel({
           )}
           {isGenerating ? "Starting…" : "Execute Spec"}
         </button>
-        {isLocked && (
-          <p className="text-[10px] text-center mt-4 text-error font-medium uppercase tracking-widest flex items-center justify-center gap-2">
+        {isLocked && userRole === 'manager' && (
+          <div className="text-[10px] text-center mt-4 text-error font-medium uppercase tracking-widest flex items-center justify-center gap-2">
             <div className="w-1 h-1 rounded-full bg-error animate-pulse-node" />
             Locked (Conflict Pending)
+          </div>
+        )}
+        {userRole !== 'manager' && (
+          <p className="text-[10px] text-center mt-4 text-outline-variant font-medium uppercase tracking-widest flex items-center justify-center gap-2">
+            Manager Access Required
           </p>
         )}
       </div>

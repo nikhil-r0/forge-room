@@ -14,9 +14,11 @@ import {
   Loader2,
   Wifi,
   WifiOff,
+  Sparkles,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ConflictCard } from "@/components/chat/ConflictCard"
+import { ConflictsPanel } from "@/components/sidebar/ConflictsPanel"
 import { SpecPanel } from "@/components/sidebar/SpecPanel"
 import { ExecutionModal } from "@/components/modals/ExecutionModal"
 import { RiskAutopsyModal } from "@/components/modals/RiskAutopsyModal"
@@ -25,8 +27,9 @@ import { DriftAlertCard } from "@/components/chat/DriftAlertCard"
 import { QRSharePanel } from "@/components/room/QRSharePanel"
 import { useRoomStore } from "@/lib/useRoomStore"
 import { connectWebSocket, disconnectWebSocket, sendMessage } from "@/lib/websocket"
-import { getRoom, executeSpec, exportSession, invokeAgent, getMe, addSkill } from "@/lib/api"
+import { getRoom, executeSpec, exportSession, invokeAgent, getMe, addSkill, updateRoomSettings } from "@/lib/api"
 import { AuthModal } from "@/components/modals/AuthModal"
+import { SettingsModal } from "@/components/modals/SettingsModal"
 import type { UIMessage, ConflictPayload, DriftAlertPayload } from "@/lib/types"
 
 // Lazy-load React Flow to avoid SSR issues
@@ -97,6 +100,7 @@ function ChatRoomContent() {
   const approvedDecisions = useRoomStore((s) => s.approvedDecisions);
   const pendingTasks = useRoomStore((s) => s.pendingTasks);
   const openConflicts = useRoomStore((s) => s.openConflicts);
+  const conflicts = useRoomStore((s) => s.conflicts);
   const activeSkills = useRoomStore((s) => s.activeSkills);
   const focusMode = useRoomStore((s) => s.focusMode);
   const timeSaved = useRoomStore((s) => s.timeSaved);
@@ -113,32 +117,63 @@ function ChatRoomContent() {
   const [skillUrl, setSkillUrl] = useState("")
   const [skillName, setSkillName] = useState("")
   const [loaded, setLoaded] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Mentions logic
+  const allAgents = [
+    { name: "AppSec", desc: "Security Auditing & Threat Modeling" },
+    { name: "Implementer", desc: "Code Synchronization" },
+    { name: "Supervisor", desc: "Goal & Task Manager" },
+    ...activeSkills.map(s => ({ name: s.name, desc: "Custom Skill" }))
+  ]
+  
+  const lastWord = input.split(' ').pop() || ""
+  const showMentions = lastWord.startsWith('@')
+  const mentionQuery = showMentions ? lastWord.substring(1).toLowerCase() : ""
+  const filteredAgents = showMentions 
+    ? allAgents.filter(a => a.name.toLowerCase().includes(mentionQuery))
+    : []
+
+  const handleMentionSelect = (agentName: string) => {
+    const words = input.split(' ')
+    words.pop() // remove the partial mention
+    const prefix = words.join(' ')
+    setInput(prefix + (prefix ? ' ' : '') + `@${agentName} `)
+    inputRef.current?.focus()
+  }
 
   const hasUnresolvedConflict = store.conflicts.some((c) => !c.resolved)
 
   // ─── Initialize: load room + connect WS ───
+  const authCheckedRef = useRef(false)
+
   useEffect(() => {
     if (!roomId) return
 
     const init = async () => {
-      // First, try to fetch current user if not present
-      if (!currentUser) {
+      let activeUser = currentUser;
+      
+      // Sync identity once per room mount to pick up role changes (like Manager promotion)
+      if (!authCheckedRef.current) {
         try {
           const me = await getMe()
           store.setCurrentUser(me)
-          return // Effect will re-run with currentUser set
+          activeUser = me;
+          authCheckedRef.current = true;
         } catch (err) {
-          // Stay in Guest mode until AuthModal is used
+          if (!activeUser) {
+             console.warn("Guest mode: No user found.")
+          }
         }
       }
 
       try {
-        const userName = currentUser?.username || "Human"
-        const userId = currentUser?.user_id || "Guest-" + Math.random().toString(36).slice(2, 6)
+        const userName = activeUser?.username || "Human"
+        const userId = activeUser?.user_id || "Guest-" + Math.random().toString(36).slice(2, 6)
 
-        // Prevent double init if same user
+        // Prevent double init if same user and room
         if (loaded && store.roomId === roomId && store.displayName === userName) return
 
         // Set room info
@@ -170,8 +205,9 @@ function ChatRoomContent() {
 
     return () => {
       disconnectWebSocket()
+      authCheckedRef.current = false // Reset for potential re-mount
     }
-  }, [roomId, currentUser])
+  }, [roomId])
 
   // Auto-scroll on new messages
   useEffect(() => {
@@ -185,16 +221,20 @@ function ChatRoomContent() {
     sendMessage({ message: input, display_name: userName })
 
     // Check for agent invocations
-    const agentMatch = input.match(/@([\w-]+)/i)
-    if (agentMatch) {
-      const agentName = agentMatch[1]
-      invokeAgent(roomId as string, agentName).catch(() =>
-        toast.error(`Agent @${agentName} not available`)
-      )
+    const store = useRoomStore.getState()
+    if (store.focusMode) {
+      const agentMatch = input.match(/@([\w-]+)/i)
+      if (agentMatch) {
+        const agentName = agentMatch[1]
+        invokeAgent(roomId as string, agentName).catch(() =>
+          toast.error(`Agent @${agentName} not available`)
+        )
+      }
     }
 
     setInput("")
   }, [input, userName, roomId])
+
 
   const handleAddSkill = async () => {
     if (!skillUrl.trim()) return
@@ -304,7 +344,17 @@ function ChatRoomContent() {
             </span>
             <div
               className="relative inline-flex h-6 w-10 shrink-0 cursor-pointer items-center justify-center rounded-full shadow-inner"
-              onClick={() => store.setFocusMode(!focusMode)}
+              onClick={async () => {
+                const newMode = !focusMode;
+                store.setFocusMode(newMode);
+                try {
+                  await updateRoomSettings(roomId as string, undefined, newMode);
+                } catch (err) {
+                  toast.error("Failed to sync Focus Mode to server");
+                  // Optional: revert local state if API fails
+                  // store.setFocusMode(!newMode);
+                }
+              }}
             >
               <div
                 className={cn(
@@ -335,6 +385,8 @@ function ChatRoomContent() {
 
             <ThemeToggle />
 
+            <SettingsModal roomId={roomId as string} />
+
             <button
               onClick={handleExport}
               className="flex items-center gap-2 h-8 px-4 rounded-sm text-label-sm font-semibold uppercase tracking-widest text-on-surface-variant bg-surface-container-low hover:text-on-surface hover:bg-surface-container transition-all"
@@ -347,18 +399,25 @@ function ChatRoomContent() {
       </header>
 
       <div className="flex flex-1 overflow-hidden h-full">
+        {/* ─── Left Column: Conflicts & Polls ─── */}
+        <ConflictsPanel conflicts={conflicts} />
+
         {/* ─── Main Chat Area ─── */}
         <main className="flex-1 flex flex-col relative bg-surface-dim shrink-0">
           <ScrollArea className="flex-1 px-8 py-6" ref={scrollRef}>
             <div className="max-w-3xl mx-auto py-4">
               {messages.map((msg) => {
                 if (msg.type === "conflict" && msg.payload) {
-                  return (
-                    <ConflictCard
-                      key={msg.id}
-                      conflict={msg.payload as unknown as ConflictPayload}
-                    />
-                  )
+                  const p = msg.payload as unknown as ConflictPayload
+                  const pseudoMessage: UIMessage = {
+                    id: msg.id,
+                    type: "human",
+                    sender: "System",
+                    display_name: "Arbitrator",
+                    timestamp: msg.timestamp,
+                    content: `📊 **Poll Started:** ${p.summary}\n\n*Check the open conflicts panel on the left to vote.*`
+                  }
+                  return <MessageBubble key={msg.id} message={pseudoMessage} />
                 }
                 if (msg.type === "drift_alert" && msg.payload) {
                   const p = msg.payload as unknown as DriftAlertPayload
@@ -412,30 +471,66 @@ function ChatRoomContent() {
 
               {/* Chat Input */}
               <div className="relative group/chat">
-                <input
-                  type="text"
-                  placeholder={
-                    focusMode
-                      ? "AI Focus Enabled. Terminal is read-only for agents."
-                      : "Draft a spec or chat with agents..."
-                  }
-                  className="w-full pr-14 pl-4 py-4 bg-surface-container-highest text-body-md text-on-surface placeholder:text-outline-variant border-b border-transparent focus:border-primary focus:outline-none rounded-sm transition-all"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault()
-                      handleSendMessage()
+                {/* Mentions Popup */}
+                {showMentions && focusMode && filteredAgents.length > 0 && (
+                  <div className="absolute bottom-full left-0 mb-2 w-72 bg-surface-container border border-outline-variant/20 rounded-sm shadow-2xl overflow-hidden z-50">
+                    <div className="p-2 border-b border-outline-variant/10 bg-surface-container-low">
+                      <span className="text-[10px] font-bold text-outline-variant uppercase tracking-widest">
+                        Available Agents
+                      </span>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto">
+                      {filteredAgents.map(agent => (
+                        <button 
+                          key={agent.name}
+                          className="w-full text-left px-3 py-2 hover:bg-primary/10 transition-colors flex flex-col border-b border-outline-variant/5 last:border-0"
+                          onClick={() => handleMentionSelect(agent.name)}
+                        >
+                          <span className="font-bold text-sm text-primary">@{agent.name}</span>
+                          <span className="text-[11px] text-outline-variant truncate">{agent.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                <div className={cn(
+                  "relative flex items-center bg-surface-container-highest rounded-sm transition-all border-b-2 border-transparent",
+                  focusMode ? "border-primary/40 shadow-[0_4px_20px_rgba(var(--primary-rgb),0.1)]" : "border-outline-variant/10"
+                )}>
+                  {focusMode && (
+                    <Sparkles className="absolute left-4 w-4 h-4 text-primary animate-pulse" />
+                  )}
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    placeholder={
+                      focusMode
+                        ? "Draft a spec or chat with AI agents... (type @ to mention)"
+                        : "AI Focus Silenced. Normal chat active..."
                     }
-                  }}
-                />
+                    disabled={false}
+                    className={cn(
+                      "w-full pr-14 py-4 bg-transparent text-body-md text-on-surface placeholder:text-outline-variant focus:outline-none transition-all",
+                      focusMode ? "pl-11" : "pl-4"
+                    )}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault()
+                        handleSendMessage()
+                      }
+                    }}
+                  />
+                </div>
                 <div className="absolute bottom-0 left-0 w-full h-[1px] bg-primary scale-x-0 group-focus-within/chat:scale-x-100 transition-transform origin-left" />
                 <button
                   className={cn(
                     "absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center rounded-sm transition-all",
                     input.trim()
                       ? "bg-primary/10 text-primary hover:bg-primary/20"
-                      : "text-outline-variant cursor-not-allowed"
+                      : "text-outline-variant cursor-not-allowed opacity-50"
                   )}
                   onClick={handleSendMessage}
                   disabled={!input.trim()}
@@ -457,6 +552,7 @@ function ChatRoomContent() {
             openConflicts={openConflicts}
             isLocked={hasUnresolvedConflict}
             isGenerating={isGenerating}
+            userRole={currentUser?.role || "member"}
             onGenerateCode={handleGenerateCode}
           />
         </aside>

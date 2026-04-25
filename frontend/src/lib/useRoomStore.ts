@@ -1,6 +1,7 @@
 // ─── ForgeRoom Zustand Store ───
 
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import type {
   BlameEdge,
   BlameNode,
@@ -18,6 +19,8 @@ interface RoomState {
   displayName: string;
   connected: boolean;
   currentUser: User | null;
+  participants: User[];
+  creatorId: string | null;
 
   // ── Chat ──
   messages: UIMessage[];
@@ -61,6 +64,7 @@ interface RoomState {
     pending_tasks: string[];
     open_conflicts: number;
     active_skills?: SkillPayload[];
+    focus_mode?: boolean;
   }) => void;
 
   setBlameGraph: (nodes: BlameNode[], edges: BlameEdge[]) => void;
@@ -83,6 +87,7 @@ interface RoomState {
   // ── Hydrate from snapshot ──
   hydrateFromSnapshot: (snapshot: {
     room_id: string;
+    creator_id?: string;
     current_goal: string;
     focus_mode: boolean;
     pending_tasks: string[];
@@ -93,6 +98,7 @@ interface RoomState {
     last_drift_alerts: DriftAlertPayload[];
     active_skills: SkillPayload[];
     messages: { sender: string; message: string; timestamp: string }[];
+    participants: User[];
   }) => void;
 
   reset: () => void;
@@ -122,10 +128,14 @@ const initialState = {
   riskAutopsyMarkdown: "",
   exportMarkdown: "",
   currentUser: null as User | null,
+  participants: [] as User[],
+  creatorId: null as string | null,
 };
 
-export const useRoomStore = create<RoomState>((set) => ({
-  ...initialState,
+export const useRoomStore = create<RoomState>()(
+  persist(
+    (set) => ({
+      ...initialState,
 
   setRoom: (roomId, displayName) => set({ roomId, displayName }),
   setConnected: (connected) => set({ connected }),
@@ -145,6 +155,7 @@ export const useRoomStore = create<RoomState>((set) => ({
       pendingTasks: data.pending_tasks ?? [],
       openConflicts: data.open_conflicts ?? 0,
       activeSkills: data.active_skills ?? s.activeSkills,
+      focusMode: data.focus_mode !== undefined ? data.focus_mode : s.focusMode,
     })),
 
   setBlameGraph: (nodes, edges) =>
@@ -185,6 +196,7 @@ export const useRoomStore = create<RoomState>((set) => ({
   hydrateFromSnapshot: (snapshot) =>
     set({
       roomId: snapshot.room_id,
+      creatorId: snapshot.creator_id || null,
       currentGoal: snapshot.current_goal,
       focusMode: snapshot.focus_mode,
       pendingTasks: snapshot.pending_tasks,
@@ -194,6 +206,7 @@ export const useRoomStore = create<RoomState>((set) => ({
       blameEdges: snapshot.blame_graph_edges,
       driftAlerts: snapshot.last_drift_alerts,
       activeSkills: snapshot.active_skills || [],
+      participants: snapshot.participants || [],
       messages: snapshot.messages.map((m) => ({
         id: Math.random().toString(36).substr(2, 9),
         type:
@@ -210,6 +223,9 @@ export const useRoomStore = create<RoomState>((set) => ({
         .length,
     }),
 
-  reset: () => set(initialState),
+  reset: () => set((state) => ({ ...initialState, currentUser: state.currentUser })),
   setCurrentUser: (user) => set({ currentUser: user }),
+}), {
+  name: "forgeroom-auth-storage",
+  partialize: (state) => ({ currentUser: state.currentUser }),
 }));

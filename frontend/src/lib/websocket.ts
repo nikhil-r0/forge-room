@@ -24,7 +24,12 @@ const messageQueue: string[] = [];
 // ─── Connection ───
 
 export function connectWebSocket(roomId: string, userId: string) {
-  if (ws && ws.readyState === WebSocket.OPEN) return;
+  if (ws) {
+    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+      return;
+    }
+    ws.close();
+  }
 
   const url = `${WS_BASE}/ws/${roomId}/${userId}`;
   ws = new WebSocket(url);

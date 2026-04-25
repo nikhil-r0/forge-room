@@ -27,6 +27,7 @@ class DecisionCategory(str, Enum):
     FRONTEND = "frontend"
     INFRA = "infra"
     SECURITY = "security"
+    ARCHITECTURE = "architecture"
     GENERAL = "general"
 
 
@@ -148,8 +149,14 @@ class WSMessage(BaseModel):
     payload: dict[str, Any]
 
 
+class User(BaseModel):
+    user_id: str
+    username: str
+    role: str
+
 class RoomSnapshot(BaseModel):
     room_id: str
+    creator_id: str | None = None
     current_goal: str
     focus_mode: bool
     pending_tasks: list[str]
@@ -160,6 +167,7 @@ class RoomSnapshot(BaseModel):
     last_drift_alerts: list[DriftAlertPayload]
     active_skills: list[SkillPayload] = Field(default_factory=list)
     messages: list[ChatMessageIn] = Field(default_factory=list)
+    participants: list[User] = Field(default_factory=list)
     session_start: datetime
 
 
@@ -196,6 +204,7 @@ class VoteRequest(BaseModel):
 
 class ExecuteSpecRequest(BaseModel):
     room_id: str
+    executor_id: str
     spec_markdown: str
     approved_decisions: list[DecisionPayload]
     active_skills: list[SkillPayload] = Field(default_factory=list)

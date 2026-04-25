@@ -13,10 +13,17 @@ import {
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Loader2, LogIn, UserPlus } from "lucide-react"
+interface AuthModalProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
 
-export function AuthModal() {
-  const [isOpen, setIsOpen] = useState(true)
+export function AuthModal({ open, onOpenChange }: AuthModalProps = {}) {
+  const [internalOpen, setInternalOpen] = useState(true)
   const [isLogin, setIsLogin] = useState(true)
+
+  const isOpen = open !== undefined ? open : internalOpen
+  const setIsOpen = onOpenChange !== undefined ? onOpenChange : setInternalOpen
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
@@ -33,13 +40,13 @@ export function AuthModal() {
     try {
       if (isLogin) {
         const res = await login(username, password)
-        setCurrentUser({ user_id: res.user_id, username: res.username })
+        setCurrentUser({ user_id: res.user_id, username: res.username, role: res.role })
         toast.success("Welcome back!")
       } else {
         await signup(username, password)
         // Auto login after signup
         const res = await login(username, password)
-        setCurrentUser({ user_id: res.user_id, username: res.username })
+        setCurrentUser({ user_id: res.user_id, username: res.username, role: res.role })
         toast.success("Account created!")
       }
       setIsOpen(false)
